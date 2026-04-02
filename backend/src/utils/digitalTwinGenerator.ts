@@ -292,6 +292,8 @@ export async function createOrUpdateDigitalTwin(
       aggregatedData.focusSessions.length +
       aggregatedData.quizScores.length +
       (aggregatedData.revisionHistory?.length || 0),
+    aiSummary: '', // Will be populated after AI generation
+    learningPersonality: '', // Will be populated after AI generation
   };
 
   // Generate AI summary
@@ -301,8 +303,8 @@ export async function createOrUpdateDigitalTwin(
     digitalTwinData
   );
 
-  digitalTwinData.aiSummary = aiSummary;
-  digitalTwinData.learningPersonality = learningPersonality;
+  (digitalTwinData as any).aiSummary = aiSummary;
+  (digitalTwinData as any).learningPersonality = learningPersonality;
 
   // Upsert digital twin
   const existingTwin = await DigitalTwinModel.findOne({ userId, syllabusId }).sort({ createdAt: -1 });

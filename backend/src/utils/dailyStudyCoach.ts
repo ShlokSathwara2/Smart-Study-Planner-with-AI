@@ -43,7 +43,7 @@ export async function generateDailyCoachMessage(
   const quizzes = await QuizResultModel.find({
     userId,
     syllabusId,
-    completedAt: { $gte: yesterday, $lte: today },
+    completedAt: { $gte: yesterday.toISOString(), $lte: today.toISOString() },
   }).lean();
   
   // Analyze yesterday

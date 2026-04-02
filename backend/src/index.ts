@@ -15,6 +15,8 @@ import gapDetectorRouter from './routes/gapDetector';
 import digitalTwinRouter from './routes/digitalTwin';
 import examPredictRouter from './routes/examPredict';
 import studyInsightsRouter from './routes/studyInsights';
+import voiceInputRouter from './routes/voiceInput';
+import studyStrategyRouter from './routes/studyStrategy';
 import { initializeVectorCollection } from './utils/vectorService';
 import { scheduleWeeklyDigitalTwinJob } from './utils/weeklyScheduler';
 
@@ -43,6 +45,8 @@ app.use('/api/gap-detector', gapDetectorRouter);
 app.use('/api/digital-twin', digitalTwinRouter);
 app.use('/api/exam-predict', examPredictRouter);
 app.use('/api/study-insights', studyInsightsRouter);
+app.use('/api/voice-input', voiceInputRouter);
+app.use('/api/study-strategy', studyStrategyRouter);
 
 // Initialize vector database (Qdrant)
 async function initializeServer() {
