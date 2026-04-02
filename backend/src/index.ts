@@ -7,6 +7,8 @@ import topicGraphRouter from './routes/topicGraph';
 import studyPlanRouter from './routes/studyPlan';
 import estimatesRouter from './routes/estimates';
 import focusRouter from './routes/focus';
+import cognitiveLoadRouter from './routes/cognitiveLoad';
+import cognitiveLoadAutoSplitRouter from './routes/cognitiveLoadAutoSplit';
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ app.use('/api/graph', topicGraphRouter);
 app.use('/api/plan', studyPlanRouter);
 app.use('/api/estimates', estimatesRouter);
 app.use('/api/focus', focusRouter);
+app.use('/api/cognitive-load', cognitiveLoadRouter);
+app.use('/api/cognitive-load/auto-split', cognitiveLoadAutoSplitRouter);
 
 connectDB();
 

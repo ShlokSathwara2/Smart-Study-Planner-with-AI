@@ -8,9 +8,10 @@ import { KnowledgeGraph } from "@/components/KnowledgeGraph";
 import { CalendarTimeline } from "@/components/CalendarTimeline";
 import { FocusTimer } from "@/components/FocusTimer";
 import { SessionAnalytics } from "@/components/SessionAnalytics";
+import { CognitiveLoadTracker } from "@/components/CognitiveLoadTracker";
 import { GradientButton } from "@/components/GradientButton";
 
-type Tab = "upload" | "graph" | "schedule" | "focus" | "analytics";
+type Tab = "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive";
 
 export default function DashboardPage() {
   const { user } = useUser();
@@ -136,6 +137,24 @@ export default function DashboardPage() {
               </p>
             </div>
             <SessionAnalytics userId={user?.id} />
+          </div>
+        );
+        
+      case "cognitive":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">
+                🧠 Cognitive Load Analyzer
+              </h1>
+              <p className="text-slate-400">
+                AI analyzes topic difficulty and recommends optimizations
+              </p>
+            </div>
+            <CognitiveLoadTracker 
+              userId={user?.id}
+              syllabusId={syllabusId || undefined}
+            />
           </div>
         );
         

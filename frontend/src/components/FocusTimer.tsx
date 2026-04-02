@@ -109,6 +109,26 @@ export function FocusTimer({ userId, planId }: FocusTimerProps) {
 
   const handleCompleteSession = async () => {
     await saveSession();
+    
+    // Track cognitive load signal
+    if (selectedTopic && planId && userId) {
+      try {
+        await fetch("/api/cognitive-load/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            syllabusId: planId, // Using planId as proxy for syllabusId
+            topic: selectedTopic,
+            timeSpentMinutes: Math.floor(deepWorkSeconds / 60),
+            pauseCount: distractions,
+            rewindCount: 0,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to track cognitive load:", error);
+      }
+    }
   };
 
   const saveSession = async () => {
