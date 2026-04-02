@@ -18,7 +18,7 @@ export function GradientButton({ label, className = "", ...props }: GradientButt
       whileTap={{ scale: 0.97, y: 0 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
       className={`group relative inline-flex items-center justify-center overflow-hidden rounded-full px-6 py-2 text-sm font-medium text-slate-50 ${className}`}
-      {...buttonProps}
+      {...(buttonProps as any)}
     >
       <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-indigo-400 to-emerald-400" />
       <span className="absolute inset-0 opacity-0 mix-blend-screen blur-lg transition-opacity duration-300 group-hover:opacity-100" />
