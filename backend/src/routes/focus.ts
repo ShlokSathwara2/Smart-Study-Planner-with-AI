@@ -78,8 +78,8 @@ router.get('/analytics', async (req, res): Promise<void> => {
     // Calculate average focus score
     const focusScores = sessions.map(s => {
       const deepWork = s.deepWorkSeconds || 0;
-      const totalTime = deepWork + ((s.distractionCount || 0) * 60);
-      return totalTime > 0 ? Math.round((deepWork / totalTime) * 100) : 0;
+      const totalTime = s.totalSeconds || 1;
+      return Math.round((deepWork / totalTime) * 100);
     });
     const averageFocusScore = Math.round(
       focusScores.reduce((a, b) => a + b, 0) / focusScores.length
@@ -100,9 +100,9 @@ router.get('/analytics', async (req, res): Promise<void> => {
       weeklyData[weekKey].sessions += 1;
       weeklyData[weekKey].minutes += Math.floor((session.totalSeconds || 0) / 60);
       const deepWork = session.deepWorkSeconds || 0;
-      const totalTime = deepWork + ((session.distractionCount || 0) * 60);
+      const totalTime = session.totalSeconds || 1;
       weeklyData[weekKey].focusScores.push(
-        totalTime > 0 ? Math.round((deepWork / totalTime) * 100) : 0
+        Math.round((deepWork / totalTime) * 100)
       );
     });
 

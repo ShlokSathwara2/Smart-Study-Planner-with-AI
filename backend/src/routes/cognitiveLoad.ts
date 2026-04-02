@@ -38,6 +38,7 @@ router.post('/track', async (req, res): Promise<void> => {
 
     // Add new signal
     const newSignal = {
+      topic,
       timeSpentMinutes,
       quizAccuracy: quizAccuracy || 0,
       pauseCount: pauseCount || 0,

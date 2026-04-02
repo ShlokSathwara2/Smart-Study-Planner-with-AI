@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { TopicDependencyModel } from '../models/TopicDependency';
 import { StudyPlanModel } from '../models/StudyPlan';
+import { DigitalTwinModel } from '../models/DigitalTwin';
+import { getDigitalTwinContext, formatDigitalTwinPrompt } from '../utils/digitalTwinContext';
 
 const router = Router();
 
@@ -32,6 +34,8 @@ async function generatePlanWithClaude(input: {
   topics: { topic: string; dependsOn: string[] }[];
   examDate: string;
   dailyHours: number;
+  userId?: string;
+  syllabusId?: string;
 }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -49,6 +53,15 @@ async function generatePlanWithClaude(input: {
     };
   }
 
+  // Get digital twin context if available
+  let digitalTwinPrompt = '';
+  if (input.userId && input.syllabusId) {
+    const twinContext = await getDigitalTwinContext(input.userId, input.syllabusId);
+    if (twinContext) {
+      digitalTwinPrompt = '\n\n' + formatDigitalTwinPrompt(twinContext);
+    }
+  }
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -61,7 +74,7 @@ async function generatePlanWithClaude(input: {
       max_tokens: 1200,
       temperature: 0,
       system:
-        'You are an expert study planner. Return JSON only with shape: { "sessions": Array<{ "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "topic": string, "unit"?: string, "estimatedMinutes": number }> }. Ensure sessions do not overlap within the same day, and total per day <= dailyHours.',
+        'You are an expert study planner. Return JSON only with shape: { "sessions": Array<{ "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "topic": string, "unit"?: string, "estimatedMinutes": number }> }. Ensure sessions do not overlap within the same day, and total per day <= dailyHours.' + digitalTwinPrompt,
       messages: [
         {
           role: 'user',
@@ -178,7 +191,13 @@ router.post('/generate', async (req, res): Promise<void> => {
       return;
     }
 
-    const planJson = await generatePlanWithClaude({ topics, examDate, dailyHours: Number(dailyHours) });
+    const planJson = await generatePlanWithClaude({ 
+      topics, 
+      examDate, 
+      dailyHours: Number(dailyHours),
+      userId,
+      syllabusId
+    });
     const sessions = Array.isArray((planJson as any).sessions) ? (planJson as any).sessions : [];
 
     // basic validation & internal clash detection
@@ -210,6 +229,23 @@ router.post('/generate', async (req, res): Promise<void> => {
   }
 });
 
+// GET /api/plan/latest - Get latest plan for user/syllabus
+// IMPORTANT: Must be declared BEFORE /:planId routes to avoid shadowing
+router.get('/latest', async (req, res): Promise<void> => {
+  try {
+    const { userId = 'anonymous', syllabusId } = req.query as any;
+    if (!syllabusId) {
+      res.status(400).json({ error: 'syllabusId is required' });
+      return;
+    }
+    const plan = await StudyPlanModel.findOne({ userId, syllabusId }).sort({ createdAt: -1 }).lean();
+    res.json({ ok: true, plan });
+  } catch (err) {
+    console.error('Get plan error', err);
+    res.status(500).json({ error: 'Failed to load study plan' });
+  }
+});
+
 // PATCH /api/plan/:planId/session
 // Update session status / actual minutes by index (calendar UI)
 router.patch('/:planId/session', async (req, res): Promise<void> => {
@@ -221,7 +257,7 @@ router.patch('/:planId/session', async (req, res): Promise<void> => {
       res.status(400).json({ error: 'sessionIndex must be a non-negative number' });
       return;
     }
-    if (status && !['planned', 'done', 'skipped', 'partial'].includes(status)) {
+    if (status && !['planned', 'pending', 'done', 'skipped', 'partial'].includes(status)) {
       res.status(400).json({ error: 'Invalid status' });
       return;
     }
@@ -346,8 +382,7 @@ router.post('/:planId/reschedule', async (req, res): Promise<void> => {
     const fixed = sessions.filter((s: any) => s?.status === 'done' || s?.status === 'skipped');
     const remaining = sessions.filter((s: any) => {
       const status = s?.status ?? 'planned';
-      if (status === 'done' || status === 'skipped') return false;
-      return s?.date >= startFrom || s?.date < startFrom; // include anything not completed
+      return status !== 'done' && status !== 'skipped';
     });
 
     const rescheduled = await rescheduleWithClaude({
@@ -383,21 +418,6 @@ router.post('/:planId/reschedule', async (req, res): Promise<void> => {
   } catch (err) {
     console.error('Reschedule error', err);
     res.status(500).json({ error: 'Failed to reschedule plan' });
-  }
-});
-
-router.get('/latest', async (req, res): Promise<void> => {
-  try {
-    const { userId = 'anonymous', syllabusId } = req.query as any;
-    if (!syllabusId) {
-      res.status(400).json({ error: 'syllabusId is required' });
-      return;
-    }
-    const plan = await StudyPlanModel.findOne({ userId, syllabusId }).sort({ createdAt: -1 }).lean();
-    res.json({ ok: true, plan });
-  } catch (err) {
-    console.error('Get plan error', err);
-    res.status(500).json({ error: 'Failed to load study plan' });
   }
 });
 

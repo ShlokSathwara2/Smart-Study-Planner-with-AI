@@ -1,50 +1,155 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { SidebarLayout } from "@/components/SidebarLayout";
+import { GlassCard } from "@/components/GlassCard";
 import { SyllabusUploader } from "@/components/SyllabusUploader";
 import { KnowledgeGraph } from "@/components/KnowledgeGraph";
 import { CalendarTimeline } from "@/components/CalendarTimeline";
 import { FocusTimer } from "@/components/FocusTimer";
 import { SessionAnalytics } from "@/components/SessionAnalytics";
 import { CognitiveLoadTracker } from "@/components/CognitiveLoadTracker";
-import { GradientButton } from "@/components/GradientButton";
+import { DigitalTwinProfile } from "@/components/DigitalTwinProfile";
 
-type Tab = "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive";
+type Tab = "home" | "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive" | "profile";
+
+const TABS = [
+  { id: "home",      icon: "🏠", label: "Home" },
+  { id: "upload",    icon: "📤", label: "Upload" },
+  { id: "graph",     icon: "🗺️", label: "Learning Map" },
+  { id: "schedule",  icon: "📅", label: "Schedule" },
+  { id: "focus",     icon: "⏱️", label: "Focus" },
+  { id: "analytics", icon: "📊", label: "Analytics" },
+  { id: "cognitive", icon: "🧠", label: "Cognitive Load" },
+  { id: "profile",   icon: "👤", label: "My Profile" },
+];
+
+const STAT_CARDS = [
+  { icon: "🔥", label: "Day Streak",     value: "7",   unit: "days",  color: "from-orange-500/20 to-amber-600/10   border-orange-500/25", text: "text-orange-300" },
+  { icon: "📈", label: "Exam Readiness", value: "74",  unit: "%",     color: "from-emerald-500/20 to-emerald-600/10 border-emerald-500/25", text: "text-emerald-300" },
+  { icon: "⏰", label: "Studied Today",  value: "2.5", unit: "hrs",   color: "from-sky-500/20  to-sky-600/10        border-sky-500/25",     text: "text-sky-300" },
+  { icon: "🎯", label: "Topics Done",    value: "12",  unit: "/ 40",  color: "from-violet-500/20 to-violet-600/10  border-violet-500/25",   text: "text-violet-300" },
+];
+
+function StatCard({ s, i }: { s: typeof STAT_CARDS[0]; i: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: i * 0.08, duration: 0.5, ease: "easeOut" }}
+      whileHover={{ y: -4, scale: 1.02 }}
+      whileTap={{ scale: 0.97 }}
+      className={`relative rounded-2xl border bg-gradient-to-br p-5 cursor-default ${s.color}`}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <span className="text-2xl">{s.icon}</span>
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-400/70 animate-pulse" />
+      </div>
+      <p className={`text-3xl font-bold ${s.text}`}>
+        {s.value}<span className="text-sm font-medium ml-1 opacity-70">{s.unit}</span>
+      </p>
+      <p className="mt-1 text-xs text-slate-400">{s.label}</p>
+      {/* animated bottom bar */}
+      <div className="mt-3 h-0.5 w-full rounded-full bg-white/5 overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${s.text.replace("text-", "bg-")}`}
+          initial={{ width: 0 }}
+          animate={{ width: s.label === "Session Analytics" ? "100%" : `${parseInt(s.value) / (s.unit === "%" ? 1 : 40) * 100}%` }}
+          style={{ width: s.unit === "%" ? `${s.value}%` : s.unit === "days" ? "70%" : s.unit === "hrs" ? "50%" : "30%" }}
+          transition={{ delay: i * 0.08 + 0.4, duration: 1, ease: "easeOut" }}
+        />
+      </div>
+    </motion.div>
+  );
+}
 
 export default function DashboardPage() {
-  const { user } = useUser();
-  const [activeTab, setActiveTab] = useState<Tab>("upload");
+  const { user, isLoaded } = useUser();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<Tab>("home");
   const [syllabusId, setSyllabusId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
+  const [reviewsDueToday, setReviewsDueToday] = useState<number>(0);
 
-  const handleFileUpload = async (file: File) => {
+  useEffect(() => {
+    if (isLoaded && user) {
+      if (!user.unsafeMetadata?.onboarded) {
+        router.replace("/onboarding");
+      } else {
+        // Phase 12: Fetch plan to retrieve pending SM-2 reviews
+        fetch(`/api/plan/latest?userId=${user.id}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.ok && data.plan) {
+              setPlanId(data.plan._id);
+              setSyllabusId(data.plan.syllabusId);
+              const today = new Date();
+              today.setHours(23, 59, 59, 999);
+              const reviews = data.plan.sessions?.filter(
+                (s: any) =>
+                  s.status === "planned" &&
+                  s.topic.startsWith("[Review]") &&
+                  new Date(s.date) <= today
+              );
+              setReviewsDueToday(reviews?.length || 0);
+            }
+          })
+          .catch(console.error);
+      }
+    }
+  }, [isLoaded, user, router]);
+
+  const displayName =
+    (user?.unsafeMetadata?.displayName as string) ||
+    user?.firstName ||
+    "Scholar";
+  const grade = user?.unsafeMetadata?.grade as string | undefined;
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  // Prevent flash while checking onboarding state
+  if (!isLoaded || (user && !user.unsafeMetadata?.onboarded)) {
+    return (
+      <div className="min-h-screen bg-[#080f1e] flex flex-col items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-4" />
+        <p className="text-slate-400 text-sm animate-pulse">Loading workspace...</p>
+      </div>
+    );
+  }
+
+  const handleSyllabusSubmit = async (data: any) => {
     try {
       const formData = new FormData();
-      formData.append("syllabus", file);
       formData.append("userId", user?.id || "anonymous");
-      
-      const response = await fetch("/api/syllabus/upload", {
+      formData.append("grade", grade || "Unknown"); // Pass grade to adapt planning
+
+      if (data.type === "file") {
+        formData.append("syllabus", data.file);
+      } else {
+        formData.append("manualSyllabus", JSON.stringify(data.chapters));
+      }
+
+      if (data.referenceBook) {
+        formData.append("referenceBook", data.referenceBook);
+      }
+
+      const response = await fetch(`/api/syllabus/upload`, {
         method: "POST",
         body: formData,
       });
+      const responseData = await response.json();
       
-      const data = await response.json();
-      if (data.ok && data.syllabus) {
-        setSyllabusId(data.syllabus._id);
-        
-        // Generate topic graph after syllabus upload
-        const graphResponse = await fetch(`/api/topic-graph/from-syllabus/${data.syllabus._id}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user?.id }),
-        });
-        
-        if (graphResponse.ok) {
-          console.log("Topic graph generated");
-        }
-        
+      if (responseData.ok && responseData.syllabus) {
+        setSyllabusId(responseData.syllabus._id);
+        const graphResponse = await fetch(
+          `/api/graph/from-syllabus/${responseData.syllabus._id}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user?.id }) }
+        );
+        if (graphResponse.ok) console.log("Topic graph generated");
         return true;
       }
       return false;
@@ -56,108 +161,164 @@ export default function DashboardPage() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case "home":
+        return (
+          <div className="space-y-8">
+            {/* Personal greeting */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-50">
+                {greeting},{" "}
+                <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-emerald-400 bg-clip-text text-transparent animate-gradient">
+                  {displayName}
+                </span>{" "}
+                👋
+              </h1>
+              <p className="mt-2 text-slate-400 text-sm">
+                {grade ? `${grade} student · ` : ""}Here&apos;s your study overview for today.
+              </p>
+            </motion.div>
+
+            {/* Stat cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {STAT_CARDS.map((s, i) => (
+                <StatCard key={s.label} s={s} i={i} />
+              ))}
+            </div>
+
+            {/* Quick Actions */}
+            <div>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {[
+                  { icon: "📤", label: "Upload Syllabus",     desc: "Analyze your syllabus with AI",       tab: "upload" as Tab,    gradient: "from-indigo-500/15 to-violet-500/10  border-indigo-500/25" },
+                  { icon: "⏱️", label: "Start Focus Session",  desc: "Begin a Pomodoro work block",         tab: "focus" as Tab,     gradient: "from-emerald-500/15 to-teal-500/10    border-emerald-500/25" },
+                  { icon: "📊", label: "View Analytics",      desc: "See your study performance",          tab: "analytics" as Tab, gradient: "from-sky-500/15 to-blue-500/10          border-sky-500/25" },
+                  { icon: "🗺️", label: "Learning Map",        desc: "Explore topic dependencies",         tab: "graph" as Tab,     gradient: "from-violet-500/15 to-fuchsia-500/10  border-violet-500/25" },
+                  { icon: "🧠", label: "Cognitive Analysis",  desc: "Check your mental load",              tab: "cognitive" as Tab, gradient: "from-amber-500/15 to-orange-500/10     border-amber-500/25" },
+                  { icon: "📅", label: "Study Schedule",      desc: "Your day-by-day plan",                tab: "schedule" as Tab,  gradient: "from-rose-500/15 to-pink-500/10          border-rose-500/25" },
+                ].map((item, i) => (
+                  <motion.button
+                    key={item.label}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + i * 0.06, duration: 0.4 }}
+                    whileHover={{ y: -4, scale: 1.02 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab(item.tab)}
+                    className={`text-left rounded-2xl border bg-gradient-to-br p-5 transition-shadow hover:shadow-lg hover:shadow-black/30 ${item.gradient}`}
+                  >
+                    <span className="text-2xl">{item.icon}</span>
+                    <p className="mt-3 text-sm font-semibold text-slate-100">{item.label}</p>
+                    <p className="mt-1 text-xs text-slate-400 leading-relaxed">{item.desc}</p>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+
+            {/* AI Coach Card */}
+            <GlassCard glow className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-lg shadow-lg shadow-indigo-500/20">
+                  🤖
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">AI Daily Coach</p>
+                  <p className="text-sm text-slate-200 leading-relaxed">
+                    {displayName}, you have{" "}
+                    <span className="text-indigo-300 font-semibold">{reviewsDueToday} topics due for spaced repetition</span>{" "}
+                    today. Your focus score has improved by{" "}
+                    <span className="text-emerald-300 font-semibold">18%</span> this week — great momentum! 🎉
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">
+                    💡 Tip: Your best focus window is 9 AM – 11 AM based on your session history.
+                  </p>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
+        );
+
       case "upload":
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">
-                Upload Your Syllabus
-              </h1>
-              <p className="text-slate-400">
-                AI will analyze it and create your personalized study plan
-              </p>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">Upload Your Syllabus</h1>
+              <p className="mt-1 text-slate-400 text-sm">AI will analyze it and create your personalized study plan</p>
             </div>
-            <SyllabusUploader onFileUpload={handleFileUpload} />
+            <SyllabusUploader onSyllabusSubmit={handleSyllabusSubmit} />
           </div>
         );
-        
+
       case "graph":
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">
-                Learning Path Map
-              </h1>
-              <p className="text-slate-400">
-                Visualize topic dependencies and optimal learning order
-              </p>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">Learning Path Map</h1>
+              <p className="mt-1 text-slate-400 text-sm">Visualize topic dependencies and optimal learning order</p>
             </div>
-            <KnowledgeGraph 
-              syllabusId={syllabusId || undefined} 
-              userId={user?.id} 
-            />
+            <KnowledgeGraph syllabusId={syllabusId || undefined} userId={user?.id} />
           </div>
         );
-        
+
       case "schedule":
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">
-                Your Study Schedule
-              </h1>
-              <p className="text-slate-400">
-                Track your day-by-day study plan and progress
-              </p>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">Your Study Schedule</h1>
+              <p className="mt-1 text-slate-400 text-sm">Track your day-by-day study plan and progress</p>
             </div>
-            <CalendarTimeline 
-              planId={planId || undefined} 
-              userId={user?.id} 
-            />
+            <CalendarTimeline planId={planId || undefined} userId={user?.id} />
           </div>
         );
-        
+
       case "focus":
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">
-                Focus Timer
-              </h1>
-              <p className="text-slate-400">
-                Pomodoro technique with distraction tracking
-              </p>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">Focus Timer</h1>
+              <p className="mt-1 text-slate-400 text-sm">Pomodoro technique with distraction tracking</p>
             </div>
-            <FocusTimer 
-              userId={user?.id} 
-              planId={planId || undefined} 
-            />
+            <FocusTimer userId={user?.id} planId={planId || undefined} />
           </div>
         );
-        
+
       case "analytics":
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">
-                Session Analytics
-              </h1>
-              <p className="text-slate-400">
-                Insights into your study habits and performance
-              </p>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">Session Analytics</h1>
+              <p className="mt-1 text-slate-400 text-sm">Insights into your study habits and performance</p>
             </div>
             <SessionAnalytics userId={user?.id} />
           </div>
         );
-        
+
       case "cognitive":
         return (
           <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-slate-50 mb-2">
-                🧠 Cognitive Load Analyzer
-              </h1>
-              <p className="text-slate-400">
-                AI analyzes topic difficulty and recommends optimizations
-              </p>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">🧠 Cognitive Load Analyzer</h1>
+              <p className="mt-1 text-slate-400 text-sm">AI analyzes topic difficulty and recommends optimizations</p>
             </div>
-            <CognitiveLoadTracker 
-              userId={user?.id}
-              syllabusId={syllabusId || undefined}
-            />
+            <CognitiveLoadTracker userId={user?.id} syllabusId={syllabusId || undefined} />
           </div>
         );
-        
+
+      case "profile":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">👤 My Learning Profile</h1>
+              <p className="mt-1 text-slate-400 text-sm">AI Digital Twin analyzing your unique learning patterns</p>
+            </div>
+            <DigitalTwinProfile userId={user?.id} syllabusId={syllabusId || undefined} />
+          </div>
+        );
+
       default:
         return null;
     }
@@ -165,31 +326,45 @@ export default function DashboardPage() {
 
   return (
     <SidebarLayout>
-      {/* Top Navigation Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
-        {[
-          { id: "upload", label: "📤 Upload", icon: "📤" },
-          { id: "graph", label: "🗺️ Graph", icon: "🗺️" },
-          { id: "schedule", label: "📅 Schedule", icon: "📅" },
-          { id: "focus", label: "⏱️ Focus", icon: "⏱️" },
-          { id: "analytics", label: "📊 Analytics", icon: "📊" },
-        ].map((tab) => (
-          <button
+      {/* Tab Bar */}
+      <div className="mb-6 relative flex items-center gap-1 overflow-x-auto pb-1 scrollbar-thin">
+        {TABS.map((tab) => (
+          <motion.button
             key={tab.id}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setActiveTab(tab.id as Tab)}
-            className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-all ${
+            className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
               activeTab === tab.id
-                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
-                : "bg-white/5 text-slate-400 hover:bg-white/10"
+                ? "bg-indigo-500/20 text-indigo-200 shadow-md shadow-indigo-500/10"
+                : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
             }`}
           >
-            {tab.label}
-          </button>
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+            {activeTab === tab.id && (
+              <motion.div
+                layoutId="tab-indicator"
+                className="absolute inset-0 rounded-xl bg-indigo-500/10 border border-indigo-500/20"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+          </motion.button>
         ))}
       </div>
 
-      {/* Main Content */}
-      {renderContent()}
+      {/* Content with page transition */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+        >
+          {renderContent()}
+        </motion.div>
+      </AnimatePresence>
     </SidebarLayout>
   );
 }

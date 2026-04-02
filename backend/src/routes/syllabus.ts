@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
+const pdfParse = require('pdf-parse');
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
 import * as mammoth from 'mammoth';
 import { SyllabusModel } from '../models/Syllabus';
+import { batchEmbedTopics } from '../utils/vectorService';
 
 const router = Router();
 
@@ -41,16 +42,35 @@ async function extractDocx(buffer: Buffer): Promise<string> {
   return (result.value || '').trim();
 }
 
-async function analyzeWithClaude(rawText: string) {
+async function analyzeWithClaude(rawText: string, grade: string, rawBookText?: string) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     // Fallback: simple heuristic without external API
     return {
       topics: [],
+      chapters: [],
       units: [],
       difficulty: 'medium',
       estimatedHours: 0,
     };
+  }
+
+  const systemPrompt = `You analyze academic syllabi and return a concise JSON structure.
+The user is in grade/level: ${grade}. Please adapt the estimatedHours and difficulty based on their level.
+Always extract 'chapters' containing the chapter title and 'pages' (number of pages).
+If a reference book is provided, use its concepts to refine topics.
+Respond with JSON only matching this schema:
+{
+  "topics": ["concept 1", "concept 2"],
+  "chapters": [{"title": "Chapter 1 Name", "pages": 20}],
+  "units": ["Unit 1 Name"],
+  "difficulty": "easy" | "medium" | "hard",
+  "estimatedHours": number
+}`;
+
+  let userContent = `Here is the syllabus or study plan.\n\n${rawText.slice(0, 20000)}`;
+  if (rawBookText) {
+    userContent += `\n\nAdditionally, here is an excerpt from the reference book:\n${rawBookText.slice(0, 30000)}`;
   }
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -62,22 +82,13 @@ async function analyzeWithClaude(rawText: string) {
     },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 800,
+      max_tokens: 1500,
       temperature: 0,
-      system:
-        'You analyze academic syllabi and return a concise JSON structure with topics, units, difficulty (easy|medium|hard), and estimatedHours (number). Respond with JSON only.',
+      system: systemPrompt,
       messages: [
         {
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Here is a syllabus or study plan. Extract structured information.\n\n${rawText.slice(
-                0,
-                20000,
-              )}`,
-            },
-          ],
+          content: [{ type: 'text', text: userContent }],
         },
       ],
     }),
@@ -88,13 +99,14 @@ async function analyzeWithClaude(rawText: string) {
   }
 
   const data = await response.json();
-  const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
+  const content = data?.content?.[0]?.text ?? '';
 
   try {
     return JSON.parse(content);
   } catch {
     return {
       topics: [],
+      chapters: [],
       units: [],
       difficulty: 'medium',
       estimatedHours: 0,
@@ -104,61 +116,95 @@ async function analyzeWithClaude(rawText: string) {
 
 router.post(
   '/upload',
-  upload.single('syllabus'),
+  upload.fields([{ name: 'syllabus', maxCount: 1 }, { name: 'referenceBook', maxCount: 1 }]),
   async (req, res): Promise<void> => {
     try {
-      const file = req.file;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const file = files?.['syllabus']?.[0];
+      const referenceBook = files?.['referenceBook']?.[0];
+      
       const userId = (req.body.userId as string) || 'anonymous';
-
-      if (!file) {
-        res.status(400).json({ error: 'No file uploaded' });
-        return;
-      }
+      const grade = (req.body.grade as string) || 'Unknown';
+      const manualSyllabusRaw = req.body.manualSyllabus as string;
 
       let rawText = '';
-      const mime = file.mimetype;
-      const buffer = file.buffer;
+      let mime = 'text/plain';
+      let originalFilename = 'manual_entry.txt';
 
-      if (mime === 'application/pdf') {
-        const { text, isScanned } = await extractTextFromPdf(buffer);
-        if (!isScanned && text) {
-          rawText = text;
-        } else {
+      if (manualSyllabusRaw) {
+        // Manual entry mode
+        const parsedChapters = JSON.parse(manualSyllabusRaw);
+        rawText = parsedChapters.map((c: any) => `Chapter: ${c.title} (Pages: ${c.pages})`).join('\n');
+      } else if (file) {
+        // File upload mode
+        mime = file.mimetype;
+        originalFilename = file.originalname;
+        const buffer = file.buffer;
+
+        if (mime === 'application/pdf') {
+          const { text, isScanned } = await extractTextFromPdf(buffer);
+          if (!isScanned && text) {
+            rawText = text;
+          } else {
+            const preprocessed = await preprocessImage(buffer);
+            rawText = await ocrImage(preprocessed);
+          }
+        } else if (
+          mime.startsWith('image/') ||
+          ['image/png', 'image/jpeg', 'image/jpg'].includes(mime)
+        ) {
           const preprocessed = await preprocessImage(buffer);
           rawText = await ocrImage(preprocessed);
+        } else if (
+          mime ===
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          mime === 'application/msword'
+        ) {
+          rawText = await extractDocx(buffer);
+        } else {
+          res.status(400).json({ error: `Unsupported file type: ${mime}` });
+          return;
         }
-      } else if (
-        mime.startsWith('image/') ||
-        ['image/png', 'image/jpeg', 'image/jpg'].includes(mime)
-      ) {
-        const preprocessed = await preprocessImage(buffer);
-        rawText = await ocrImage(preprocessed);
-      } else if (
-        mime ===
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        mime === 'application/msword'
-      ) {
-        rawText = await extractDocx(buffer);
       } else {
-        res.status(400).json({ error: `Unsupported file type: ${mime}` });
+        res.status(400).json({ error: 'No syllabus data provided' });
         return;
       }
 
       rawText = rawText.trim();
       if (!rawText) {
-        res.status(422).json({ error: 'Unable to extract any text from file' });
+        res.status(422).json({ error: 'Unable to extract any text from syllabus' });
         return;
       }
 
-      const analysis = await analyzeWithClaude(rawText);
+      // Extract reference book text if present (take first 50k chars for context)
+      let rawBookText = '';
+      if (referenceBook && referenceBook.mimetype === 'application/pdf') {
+        try {
+          const bookData = await extractTextFromPdf(referenceBook.buffer);
+          rawBookText = bookData.text.slice(0, 50000);
+        } catch (err) {
+          console.warn('Failed to parse reference book PDF', err);
+        }
+      }
+
+      const analysis = await analyzeWithClaude(rawText, grade, rawBookText);
 
       const syllabus = await SyllabusModel.create({
         userId,
-        sourceFilename: file.originalname,
+        sourceFilename: originalFilename,
         mimeType: mime,
         rawText,
+        rawBookText: rawBookText || undefined,
+        grade,
         analysis,
       });
+
+      // Background task: Embed all topics in vector database (non-blocking)
+      if (analysis.topics && analysis.topics.length > 0) {
+        batchEmbedTopics(syllabus._id.toString(), analysis.topics).catch(err => {
+          console.warn(`⚠️  Background embedding failed for syllabus ${syllabus._id}:`, err);
+        });
+      }
 
       res.json({
         ok: true,

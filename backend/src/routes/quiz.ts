@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { QuizResultModel } from '../models/QuizResult';
 import { WeakTopicModel } from '../models/WeakTopic';
 import { TopicEstimateModel } from '../models/TopicEstimate';
+import { StudyPlanModel } from '../models/StudyPlan';
+import { calculateNextReview } from '../utils/sm2';
 
 const router = Router();
 
@@ -86,13 +88,15 @@ router.post('/submit', async (req, res): Promise<void> => {
   try {
     const { 
       userId = 'anonymous', 
-      syllabusId, 
+      syllabusId,
+      planId,
       topic, 
       questions, 
       attempts 
     } = req.body as {
       userId?: string;
       syllabusId: string;
+      planId?: string;
       topic: string;
       questions: any[];
       attempts: any[];
@@ -123,12 +127,50 @@ router.post('/submit', async (req, res): Promise<void> => {
     // Update weak topic detection
     await updateWeakTopicDetection(userId, syllabusId, topic, score, quizResult._id.toString());
 
+    // Phase 12 - SM-2 Spaced Repetition Auto-Scheduling
+    let nextReviewDate: string | null = null;
+    if (planId) {
+      // Map 0-100 score to 0-5 quality scale
+      const quality = Math.max(0, Math.floor(score / 20));
+      const sm2Result = calculateNextReview(quality);
+      // Format as YYYY-MM-DD to match StudySession.date type
+      const d = sm2Result.nextReviewDate;
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      nextReviewDate = `${yyyy}-${mm}-${dd}`;
+
+      try {
+        const plan = await StudyPlanModel.findById(planId);
+        if (plan) {
+          (plan.sessions as any[]).push({
+            date: nextReviewDate,
+            startTime: '20:00',
+            endTime: '20:30',
+            topic: `[Review] ${topic}`,
+            estimatedMinutes: 30,
+            status: 'planned',
+            isReview: true,
+          });
+          
+          // Sort timeline chronologically
+          plan.sessions.sort((a: any, b: any) => 
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+          );
+          await plan.save();
+        }
+      } catch (scheduleErr) {
+        console.error('Failed to auto-schedule SM2 review', scheduleErr);
+      }
+    }
+
     res.json({ 
       ok: true, 
       score, 
       correctCount, 
       totalQuestions: questions.length,
-      quizId: quizResult._id 
+      quizId: quizResult._id,
+      nextReviewScheduled: nextReviewDate
     });
   } catch (err) {
     console.error('Quiz submission error', err);
@@ -163,8 +205,10 @@ async function updateWeakTopicDetection(
   latestScore: number,
   quizId: string
 ) {
-  // Get all quiz attempts for this topic
-  const allQuizzes = await QuizResultModel.find({ userId, syllabusId, topic }).lean();
+  // Get all quiz attempts for this topic, sorted by most recent first
+  const allQuizzes = await QuizResultModel.find({ userId, syllabusId, topic })
+    .sort({ completedAt: -1 })
+    .lean();
   
   if (allQuizzes.length === 0) return;
 

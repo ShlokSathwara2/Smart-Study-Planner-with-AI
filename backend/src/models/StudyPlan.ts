@@ -2,14 +2,23 @@ import { Schema, model, Document } from 'mongoose';
 
 export interface StudySession {
   date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
+  startTime?: string; // HH:mm
+  endTime?: string; // HH:mm
   topic: string;
   unit?: string;
-  estimatedMinutes: number;
-  status?: 'planned' | 'done' | 'skipped' | 'partial';
+  estimatedMinutes?: number;
+  status?: 'planned' | 'done' | 'skipped' | 'partial' | 'pending';
   actualMinutes?: number;
   loggedAt?: string; // ISO timestamp
+  // Phase 9 — cognitive load auto-split
+  isSubModule?: boolean;
+  parentTopic?: string;
+  // Phase 10 — weak topic time adjustment
+  wasAdjustedForWeakness?: boolean;
+  originalEstimatedMinutes?: number;
+  priorityLevel?: string;
+  // Phase 12 — spaced repetition
+  isReview?: boolean;
 }
 
 export interface StudyPlanDocument extends Document {
@@ -25,14 +34,23 @@ export interface StudyPlanDocument extends Document {
 const StudySessionSchema = new Schema<StudySession>(
   {
     date: { type: String, required: true },
-    startTime: { type: String, required: true },
-    endTime: { type: String, required: true },
+    startTime: { type: String, default: '09:00' },
+    endTime: { type: String, default: '10:00' },
     topic: { type: String, required: true },
     unit: { type: String },
-    estimatedMinutes: { type: Number, required: true },
+    estimatedMinutes: { type: Number, default: 60 },
     status: { type: String, default: 'planned' },
     actualMinutes: { type: Number },
     loggedAt: { type: String },
+    // Phase 9 — cognitive load auto-split
+    isSubModule: { type: Boolean, default: false },
+    parentTopic: { type: String },
+    // Phase 10 — weak topic time adjustment
+    wasAdjustedForWeakness: { type: Boolean, default: false },
+    originalEstimatedMinutes: { type: Number },
+    priorityLevel: { type: String },
+    // Phase 12 — spaced repetition review
+    isReview: { type: Boolean, default: false },
   },
   { _id: false },
 );

@@ -4,248 +4,348 @@ import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GlassCard } from "./GlassCard";
 
-interface FileUploadProps {
-  onFileUpload: (file: File) => Promise<boolean>;
+interface ChapterInput {
+  id: string;
+  title: string;
+  pages: string;
+}
+
+export interface SyllabusUploadData {
+  type: "file" | "manual";
+  file?: File;
+  chapters?: { title: string; pages: number }[];
+  referenceBook?: File;
+}
+
+interface SyllabusUploaderProps {
+  onSyllabusSubmit: (data: SyllabusUploadData) => Promise<boolean>;
   accept?: string[];
   maxSize?: number; // in MB
 }
 
-export function SyllabusUploader({ onFileUpload, accept = [".pdf", ".docx", ".png", ".jpg", ".jpeg"], maxSize = 10 }: FileUploadProps) {
-  const [isDragging, setIsDragging] = useState(false);
+export function SyllabusUploader({
+  onSyllabusSubmit,
+  accept = [".pdf", ".docx", ".png", ".jpg", ".jpeg"],
+  maxSize = 10,
+}: SyllabusUploaderProps) {
+  const [mode, setMode] = useState<"file" | "manual">("manual");
+  const [isDraggingSyllabus, setIsDraggingSyllabus] = useState(false);
+  const [isDraggingBook, setIsDraggingBook] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // File Mode
+  const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
+
+  // Manual Mode
+  const [chapters, setChapters] = useState<ChapterInput[]>([{ id: "1", title: "", pages: "" }]);
+
+  // Optional Reference Book
+  const [referenceBook, setReferenceBook] = useState<File | null>(null);
+
+  const syllabusInputRef = useRef<HTMLInputElement>(null);
+  const bookInputRef = useRef<HTMLInputElement>(null);
 
   const validateFile = (file: File): boolean => {
     const extension = "." + file.name.split(".").pop()?.toLowerCase();
-    const isValidType = accept.some(ext => extension === ext.toLowerCase());
-    
+    const isValidType = accept.some((ext) => extension === ext.toLowerCase());
+
     if (!isValidType) {
       setError(`Invalid file type. Accepted: ${accept.join(", ")}`);
       return false;
     }
-    
+
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > maxSize) {
       setError(`File too large. Maximum size: ${maxSize}MB`);
       return false;
     }
-    
+
     return true;
   };
 
-  const handleFile = useCallback((file: File) => {
+  const validatePdfOnly = (file: File): boolean => {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Reference book must be a PDF file.");
+      return false;
+    }
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 50) {
+      setError("Book file is too large. Maximum size: 50MB");
+      return false;
+    }
+    return true;
+  };
+
+  // --- Handlers for Syllabus File ---
+  const handleSyllabusFile = useCallback((file: File) => {
     setError(null);
-    if (validateFile(file)) {
-      setSelectedFile(file);
-      onFileUpload(file);
-    }
-  }, [onFileUpload]);
-
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    if (validateFile(file)) setSyllabusFile(file);
   }, []);
 
-  const handleDragIn = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragging(true);
-    }
+  const handleSyllabusDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingSyllabus(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleSyllabusFile(e.dataTransfer.files[0]);
+      }
+    },
+    [handleSyllabusFile]
+  );
+
+  // --- Handlers for Book File ---
+  const handleBookFile = useCallback((file: File) => {
+    setError(null);
+    if (validatePdfOnly(file)) setReferenceBook(file);
   }, []);
 
-  const handleDragOut = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  }, []);
+  const handleBookDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingBook(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleBookFile(e.dataTransfer.files[0]);
+      }
+    },
+    [handleBookFile]
+  );
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      handleFile(file);
-    }
-  }, [handleFile]);
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFile(e.target.files[0]);
+  // --- Manual Mode Actions ---
+  const addChapter = () => {
+    setChapters([...chapters, { id: Math.random().toString(), title: "", pages: "" }]);
+  };
+  const updateChapter = (id: string, field: "title" | "pages", value: string) => {
+    setChapters(chapters.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
+  };
+  const removeChapter = (id: string) => {
+    if (chapters.length > 1) {
+      setChapters(chapters.filter((c) => c.id !== id));
     }
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    
-    setUploading(true);
+  // --- Submit ---
+  const handleSubmit = async () => {
     setError(null);
-    
+    let data: SyllabusUploadData;
+
+    if (mode === "file") {
+      if (!syllabusFile) {
+        setError("Please upload a syllabus file.");
+        return;
+      }
+      data = { type: "file", file: syllabusFile, referenceBook: referenceBook || undefined };
+    } else {
+      const validChapters = chapters.filter((c) => c.title.trim() !== "" && parseInt(c.pages) > 0);
+      if (validChapters.length === 0) {
+        setError("Please enter at least one valid chapter with page counts.");
+        return;
+      }
+      data = {
+        type: "manual",
+        chapters: validChapters.map((c) => ({ title: c.title, pages: parseInt(c.pages) })),
+        referenceBook: referenceBook || undefined,
+      };
+    }
+
+    setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("syllabus", selectedFile);
-      
-      const response = await fetch("/api/syllabus/upload", {
-        method: "POST",
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-      
-      const data = await response.json();
-      console.log("Upload successful:", data);
-      
-      // Trigger parent callback
-      await onFileUpload(selectedFile);
-      
-      if (data.ok && data.syllabus) {
-        setError(null);
-      }
+      await onSyllabusSubmit(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : "Submission failed");
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <GlassCard className="w-full max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-50 mb-2">Upload Your Syllabus</h2>
+    <GlassCard className="w-full max-w-3xl mx-auto p-6 sm:p-8">
+      {/* Header */}
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl font-bold text-slate-50 mb-2">Configure Your Syllabus</h2>
         <p className="text-sm text-slate-400">
-          AI will analyze your syllabus and create a personalized study plan
+          Upload a file or type your chapters to create a micro-level study plan.
         </p>
       </div>
 
-      <div
-        onDragEnter={handleDragIn}
-        onDragLeave={handleDragOut}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`
-          relative border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
-          transition-all duration-300 ease-in-out
-          ${isDragging 
-            ? "border-indigo-400 bg-indigo-500/10 scale-[1.02]" 
-            : "border-white/10 hover:border-indigo-400/50 hover:bg-white/[0.02]"
-          }
-        `}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={accept.join(",")}
-          onChange={handleFileInput}
-          className="hidden"
-        />
-        
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.3 }}
+      {/* Mode Toggle */}
+      <div className="flex bg-slate-900/50 p-1 rounded-xl w-fit mx-auto mb-8 border border-white/5">
+        <button
+          onClick={() => setMode("manual")}
+          className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === "manual" ? "bg-indigo-500/20 text-indigo-300 shadow" : "text-slate-400 hover:text-slate-200"
+          }`}
         >
-          <div className="text-6xl mb-4">📄</div>
-          <p className="text-lg font-medium text-slate-200 mb-2">
-            {isDragging ? "Drop your file here" : "Drag & drop your syllabus"}
-          </p>
-          <p className="text-sm text-slate-400 mb-4">
-            or click to browse
-          </p>
-          <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-500">
-            {accept.map(ext => (
-              <span key={ext} className="px-2 py-1 bg-white/5 rounded-md">
-                {ext.toUpperCase()}
-              </span>
-            ))}
-          </div>
-          <p className="text-xs text-slate-500 mt-3">
-            Maximum file size: {maxSize}MB
-          </p>
-        </motion.div>
+          Type Manually
+        </button>
+        <button
+          onClick={() => setMode("file")}
+          className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === "file" ? "bg-indigo-500/20 text-indigo-300 shadow" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Upload File
+        </button>
       </div>
 
-      <AnimatePresence>
-        {selectedFile && (
+      {/* Dynamic Content */}
+      <AnimatePresence mode="wait">
+        {mode === "manual" ? (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="mt-6 overflow-hidden"
+            key="manual"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4 mb-8"
           >
-            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">✅</div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">{selectedFile.name}</p>
-                    <p className="text-xs text-slate-400">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  className="text-slate-400 hover:text-red-400 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              {!uploading && (
-                <motion.button
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleUpload}
-                  className="mt-4 w-full bg-gradient-to-r from-indigo-500 to-indigo-400 text-white font-medium py-2.5 px-4 rounded-lg hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300"
-                >
-                  Analyze with AI
-                </motion.button>
-              )}
-              
-              {uploading && (
-                <div className="mt-4">
-                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-indigo-400 to-emerald-400"
-                      initial={{ width: "0%" }}
-                      animate={{ width: "100%" }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    />
-                  </div>
-                  <p className="text-center text-xs text-slate-400 mt-2">
-                    AI is analyzing your syllabus...
-                  </p>
-                </div>
-              )}
+            <div className="flex justify-between items-end mb-2">
+              <h3 className="text-sm font-medium text-slate-300">Chapters & Page Counts</h3>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Required for micro-planning</p>
             </div>
+            {chapters.map((c, idx) => (
+              <div key={c.id} className="flex gap-3 items-start">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={c.title}
+                    onChange={(e) => updateChapter(c.id, "title", e.target.value)}
+                    placeholder={`e.g. Chapter ${idx + 1}: Thermodynamics`}
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+                <div className="w-24 shrink-0">
+                  <input
+                    type="number"
+                    min="1"
+                    value={c.pages}
+                    onChange={(e) => updateChapter(c.id, "pages", e.target.value)}
+                    placeholder="Pages"
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+                {chapters.length > 1 && (
+                  <button
+                    onClick={() => removeChapter(c.id)}
+                    className="p-3 text-slate-500 hover:text-rose-400 transition-colors"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={addChapter}
+              className="text-sm text-indigo-400 hover:text-indigo-300 font-medium py-2 flex items-center gap-1.5 transition-colors"
+            >
+              <span className="text-lg leading-none">+</span> Add another chapter
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="file"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-8"
+          >
+            {!syllabusFile ? (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingSyllabus(true); }}
+                onDragLeave={() => setIsDraggingSyllabus(false)}
+                onDrop={handleSyllabusDrop}
+                onClick={() => syllabusInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
+                  isDraggingSyllabus ? "border-indigo-400 bg-indigo-500/10" : "border-white/10 hover:border-indigo-500/30 hover:bg-white/[0.02]"
+                }`}
+              >
+                <input ref={syllabusInputRef} type="file" accept={accept.join(",")} onChange={(e) => { if (e.target.files) handleSyllabusFile(e.target.files[0]); }} className="hidden" />
+                <div className="text-4xl mb-3">📄</div>
+                <p className="text-sm font-medium text-slate-200 mb-1">Click or drag syllabus here</p>
+                <p className="text-xs text-slate-500">{accept.join(", ")} up to {maxSize}MB</p>
+              </div>
+            ) : (
+              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <p className="text-sm font-medium text-slate-200">{syllabusFile.name}</p>
+                    <p className="text-xs text-slate-400">{(syllabusFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                </div>
+                <button onClick={() => setSyllabusFile(null)} className="text-slate-400 hover:text-rose-400 p-2">✕</button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4"
-        >
-          <div className="flex items-center gap-3">
-            <div className="text-xl">⚠️</div>
-            <p className="text-sm text-red-300">{error}</p>
+      {/* Optional Reference Book */}
+      <div className="border-t border-white/5 pt-6 mb-8">
+        <div className="flex justify-between items-end mb-4">
+          <h3 className="text-sm font-medium text-slate-300">Reference Book (Optional)</h3>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">For AI Content Extraction</p>
+        </div>
+        {!referenceBook ? (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDraggingBook(true); }}
+            onDragLeave={() => setIsDraggingBook(false)}
+            onDrop={handleBookDrop}
+            onClick={() => bookInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+              isDraggingBook ? "border-violet-400 bg-violet-500/10" : "border-white/10 hover:border-violet-500/30 hover:bg-white/[0.02]"
+            }`}
+          >
+            <input ref={bookInputRef} type="file" accept=".pdf" onChange={(e) => { if (e.target.files) handleBookFile(e.target.files[0]); }} className="hidden" />
+            <div className="flex items-center justify-center gap-4">
+              <div className="text-3xl opacity-80">📚</div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-slate-200">Have the PDF of your book?</p>
+                <p className="text-xs text-slate-500">Upload it here, or AI will fetch info from the internet.</p>
+              </div>
+            </div>
           </div>
+        ) : (
+          <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📚</span>
+              <div>
+                <p className="text-sm font-medium text-slate-200 truncate max-w-[200px] sm:max-w-xs">{referenceBook.name}</p>
+                <p className="text-xs text-violet-300/80">Will be used for content & questions</p>
+              </div>
+            </div>
+            <button onClick={() => setReferenceBook(null)} className="text-slate-400 hover:text-rose-400 p-2">✕</button>
+          </div>
+        )}
+      </div>
+
+      {/* Error & Submit */}
+      {error && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex gap-2">
+          <span>⚠️</span><p className="text-sm text-red-300">{error}</p>
         </motion.div>
+      )}
+
+      {uploading ? (
+        <div className="text-center py-4">
+          <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden mb-2">
+            <motion.div className="h-full bg-gradient-to-r from-indigo-400 to-emerald-400" initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 2, repeat: Infinity }} />
+          </div>
+          <p className="text-xs text-slate-400 animate-pulse">AI is generating your micro-level study plan...</p>
+        </div>
+      ) : (
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleSubmit}
+          className="w-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/20 relative overflow-hidden group"
+        >
+          <span className="absolute inset-0 bg-gradient-to-r from-indigo-400 via-violet-400 to-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <span className="relative z-10 flex items-center justify-center gap-2">
+            Generate Study Plan <span className="text-lg leading-none">✨</span>
+          </span>
+        </motion.button>
       )}
     </GlassCard>
   );

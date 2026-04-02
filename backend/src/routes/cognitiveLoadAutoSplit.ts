@@ -5,7 +5,7 @@ import { StudyPlanModel } from '../models/StudyPlan';
 const router = Router();
 
 // POST /api/cognitive-load/auto-split - Auto-split high-load topics in schedule
-router.post('/auto-split', async (req, res): Promise<void> => {
+router.post('/', async (req, res): Promise<void> => {
   try {
     const { userId = 'anonymous', syllabusId, planId } = req.body as {
       userId?: string;

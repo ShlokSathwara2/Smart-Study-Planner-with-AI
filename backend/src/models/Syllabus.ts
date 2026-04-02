@@ -5,8 +5,11 @@ export interface SyllabusDocument extends Document {
   sourceFilename: string;
   mimeType: string;
   rawText: string;
+  rawBookText?: string;
+  grade?: string;
   analysis: {
     topics: string[];
+    chapters: { title: string; pages: number }[];
     units: string[];
     difficulty: 'easy' | 'medium' | 'hard' | string;
     estimatedHours: number;
@@ -21,8 +24,16 @@ const SyllabusSchema = new Schema<SyllabusDocument>(
     sourceFilename: { type: String, required: true },
     mimeType: { type: String, required: true },
     rawText: { type: String, required: true },
+    rawBookText: { type: String },
+    grade: { type: String },
     analysis: {
       topics: [{ type: String }],
+      chapters: [
+        {
+          title: { type: String },
+          pages: { type: Number },
+        },
+      ],
       units: [{ type: String }],
       difficulty: { type: String, default: 'medium' },
       estimatedHours: { type: Number, default: 0 },

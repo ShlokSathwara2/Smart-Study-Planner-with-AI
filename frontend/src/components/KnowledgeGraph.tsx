@@ -27,7 +27,7 @@ export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
     
     const fetchTopics = async () => {
       try {
-        const response = await fetch(`/api/topic-graph/by-syllabus/${syllabusId}?userId=${userId}`);
+        const response = await fetch(`/api/graph/by-syllabus/${syllabusId}?userId=${userId}`);
         const data = await response.json();
         if (data.ok && data.dependencies) {
           setTopics(data.dependencies);
