@@ -24,20 +24,22 @@ interface StudyPlan {
 interface CalendarViewProps {
   planId?: string;
   userId?: string;
+  syllabusId?: string;
 }
 
-export function CalendarTimeline({ planId, userId }: CalendarViewProps) {
+export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewProps) {
   const [plan, setPlan] = useState<StudyPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentWeek, setCurrentWeek] = useState(0);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    if (!planId || !userId) return;
+    if (!userId) return;
     
     const fetchPlan = async () => {
       try {
-        const response = await fetch(`/api/study-plan/${planId}?userId=${userId}`);
+        // Fetch the latest plan for the user
+        const response = await fetch(`/api/study-plan/latest?userId=${userId}${syllabusId ? `&syllabusId=${syllabusId}` : ''}`);
         const data = await response.json();
         if (data.ok && data.plan) {
           setPlan(data.plan);
@@ -50,7 +52,7 @@ export function CalendarTimeline({ planId, userId }: CalendarViewProps) {
     };
 
     fetchPlan();
-  }, [planId, userId]);
+  }, [userId, syllabusId]);
 
   if (loading) {
     return (

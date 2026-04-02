@@ -3,6 +3,133 @@ import { FocusSessionModel } from '../models/FocusSession';
 
 const router = Router();
 
+// POST /api/focus - Log completed session
+router.post('/', async (req, res): Promise<void> => {
+  try {
+    const { userId = 'anonymous', planId, topic, startTime, endTime, actualMinutes, distractions, deepWorkSeconds } = req.body as {
+      userId?: string;
+      planId: string;
+      topic: string;
+      startTime: string;
+      endTime: string;
+      actualMinutes: number;
+      distractions?: number;
+      deepWorkSeconds?: number;
+    };
+
+    if (!topic || !planId) {
+      res.status(400).json({ error: 'topic and planId are required' });
+      return;
+    }
+
+    const session = await FocusSessionModel.create({
+      userId,
+      planSessionId: planId,
+      topic,
+      startTime,
+      endTime,
+      totalSeconds: actualMinutes * 60,
+      distractionCount: distractions || 0,
+      deepWorkSeconds: deepWorkSeconds || 0,
+      status: 'finished',
+      events: [
+        { type: 'start', at: startTime },
+        { type: 'end', at: endTime },
+      ],
+    });
+
+    res.json({ ok: true, session });
+  } catch (err) {
+    console.error('Focus log error', err);
+    res.status(500).json({ error: 'Failed to log focus session' });
+  }
+});
+
+// GET /api/focus/analytics - Get user analytics
+router.get('/analytics', async (req, res): Promise<void> => {
+  try {
+    const userId = req.query.userId as string;
+    
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
+    }
+
+    const sessions = await FocusSessionModel.find({ userId, status: 'finished' }).lean();
+    
+    if (!sessions.length) {
+      res.json({ ok: true, stats: {
+        totalSessions: 0,
+        completedSessions: 0,
+        totalMinutes: 0,
+        averageFocusScore: 0,
+        totalDistractions: 0,
+        weeklyTrend: [],
+      }});
+      return;
+    }
+
+    // Calculate stats
+    const totalSessions = sessions.length;
+    const completedSessions = sessions.filter(s => s.status === 'finished').length;
+    const totalMinutes = sessions.reduce((sum, s) => sum + Math.floor((s.totalSeconds || 0) / 60), 0);
+    const totalDistractions = sessions.reduce((sum, s) => sum + (s.distractionCount || 0), 0);
+    
+    // Calculate average focus score
+    const focusScores = sessions.map(s => {
+      const deepWork = s.deepWorkSeconds || 0;
+      const totalTime = deepWork + ((s.distractionCount || 0) * 60);
+      return totalTime > 0 ? Math.round((deepWork / totalTime) * 100) : 0;
+    });
+    const averageFocusScore = Math.round(
+      focusScores.reduce((a, b) => a + b, 0) / focusScores.length
+    );
+
+    // Weekly trend
+    const weeklyData: { [key: string]: any } = {};
+    sessions.forEach(session => {
+      const date = new Date(session.startTime);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      const weekKey = weekStart.toISOString().split('T')[0];
+      
+      if (!weeklyData[weekKey]) {
+        weeklyData[weekKey] = { sessions: 0, minutes: 0, focusScores: [] };
+      }
+      
+      weeklyData[weekKey].sessions += 1;
+      weeklyData[weekKey].minutes += Math.floor((session.totalSeconds || 0) / 60);
+      const deepWork = session.deepWorkSeconds || 0;
+      const totalTime = deepWork + ((session.distractionCount || 0) * 60);
+      weeklyData[weekKey].focusScores.push(
+        totalTime > 0 ? Math.round((deepWork / totalTime) * 100) : 0
+      );
+    });
+
+    const weeklyTrend = Object.entries(weeklyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-8)
+      .map(([week, data]: [string, any]) => ({
+        week: new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        sessions: data.sessions,
+        minutes: Math.round(data.minutes),
+        focusScore: Math.round(data.focusScores.reduce((a: number, b: number) => a + b, 0) / data.focusScores.length),
+      }));
+
+    res.json({ ok: true, stats: {
+      totalSessions,
+      completedSessions,
+      totalMinutes,
+      averageFocusScore,
+      totalDistractions,
+      weeklyTrend,
+    }});
+  } catch (err) {
+    console.error('Analytics error', err);
+    res.status(500).json({ error: 'Failed to load analytics' });
+  }
+});
+
 // POST /api/focus/start
 router.post('/start', async (req, res): Promise<void> => {
   try {

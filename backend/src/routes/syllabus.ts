@@ -104,7 +104,7 @@ async function analyzeWithClaude(rawText: string) {
 
 router.post(
   '/upload',
-  upload.single('file'),
+  upload.single('syllabus'),
   async (req, res): Promise<void> => {
     try {
       const file = req.file;

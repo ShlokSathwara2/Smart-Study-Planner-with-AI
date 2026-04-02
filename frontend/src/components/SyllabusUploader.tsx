@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GlassCard } from "./GlassCard";
 
 interface FileUploadProps {
-  onFileUpload: (file: File) => void;
+  onFileUpload: (file: File) => Promise<boolean>;
   accept?: string[];
   maxSize?: number; // in MB
 }
@@ -100,6 +100,13 @@ export function SyllabusUploader({ onFileUpload, accept = [".pdf", ".docx", ".pn
       
       const data = await response.json();
       console.log("Upload successful:", data);
+      
+      // Trigger parent callback
+      await onFileUpload(selectedFile);
+      
+      if (data.ok && data.syllabus) {
+        setError(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {

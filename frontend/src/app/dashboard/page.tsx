@@ -32,11 +32,24 @@ export default function DashboardPage() {
       const data = await response.json();
       if (data.ok && data.syllabus) {
         setSyllabusId(data.syllabus._id);
-        alert("✅ Syllabus analyzed successfully!");
+        
+        // Generate topic graph after syllabus upload
+        const graphResponse = await fetch(`/api/topic-graph/from-syllabus/${data.syllabus._id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user?.id }),
+        });
+        
+        if (graphResponse.ok) {
+          console.log("Topic graph generated");
+        }
+        
+        return true;
       }
+      return false;
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Failed to upload syllabus");
+      return false;
     }
   };
 
