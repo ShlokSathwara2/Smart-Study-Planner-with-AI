@@ -32,6 +32,7 @@ const CognitiveLoadSchema = new Schema<CognitiveLoadDocument>(
     syllabusId: { type: String, required: true, index: true },
     topic: { type: String, required: true },
     signals: [{
+      topic: { type: String },
       timeSpentMinutes: { type: Number, required: true },
       quizAccuracy: { type: Number, min: 0, max: 100 },
       pauseCount: { type: Number, default: 0 },

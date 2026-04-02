@@ -11,6 +11,12 @@ import cognitiveLoadRouter from './routes/cognitiveLoad';
 import cognitiveLoadAutoSplitRouter from './routes/cognitiveLoadAutoSplit';
 import quizRouter from './routes/quiz';
 import weakTopicsRouter from './routes/weakTopics';
+import gapDetectorRouter from './routes/gapDetector';
+import digitalTwinRouter from './routes/digitalTwin';
+import examPredictRouter from './routes/examPredict';
+import studyInsightsRouter from './routes/studyInsights';
+import { initializeVectorCollection } from './utils/vectorService';
+import { scheduleWeeklyDigitalTwinJob } from './utils/weeklyScheduler';
 
 dotenv.config();
 
@@ -33,15 +39,39 @@ app.use('/api/cognitive-load', cognitiveLoadRouter);
 app.use('/api/cognitive-load/auto-split', cognitiveLoadAutoSplitRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/weak-topics', weakTopicsRouter);
+app.use('/api/gap-detector', gapDetectorRouter);
+app.use('/api/digital-twin', digitalTwinRouter);
+app.use('/api/exam-predict', examPredictRouter);
+app.use('/api/study-insights', studyInsightsRouter);
 
-connectDB();
+// Initialize vector database (Qdrant)
+async function initializeServer() {
+  try {
+    await connectDB();
+    
+    // Initialize Qdrant vector collection in background
+    initializeVectorCollection().catch(err => {
+      console.warn('⚠️  Qdrant initialization failed - falling back to MongoDB-only vector storage');
+    });
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, message: 'Smart Study Planner API is running 🚀' });
-});
+    // Schedule weekly digital twin updates
+    scheduleWeeklyDigitalTwinJob();
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+    app.get('/health', (_req, res) => {
+      res.json({ ok: true, message: 'Smart Study Planner API is running 🚀' });
+    });
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📍 Vector embeddings powered by Xenova + Qdrant`);
+      console.log(`🧠 AI Digital Twin weekly updates scheduled`);
+    });
+  } catch (error) {
+    console.error('❌ Server initialization failed:', error);
+    process.exit(1);
+  }
+}
+
+initializeServer();
 
  
