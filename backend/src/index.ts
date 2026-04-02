@@ -9,6 +9,8 @@ import estimatesRouter from './routes/estimates';
 import focusRouter from './routes/focus';
 import cognitiveLoadRouter from './routes/cognitiveLoad';
 import cognitiveLoadAutoSplitRouter from './routes/cognitiveLoadAutoSplit';
+import quizRouter from './routes/quiz';
+import weakTopicsRouter from './routes/weakTopics';
 
 dotenv.config();
 
@@ -29,6 +31,8 @@ app.use('/api/estimates', estimatesRouter);
 app.use('/api/focus', focusRouter);
 app.use('/api/cognitive-load', cognitiveLoadRouter);
 app.use('/api/cognitive-load/auto-split', cognitiveLoadAutoSplitRouter);
+app.use('/api/quiz', quizRouter);
+app.use('/api/weak-topics', weakTopicsRouter);
 
 connectDB();
 
