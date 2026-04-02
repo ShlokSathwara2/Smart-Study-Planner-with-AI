@@ -141,7 +141,7 @@ router.post('/refresh', async (req, res): Promise<void> => {
             estimatedHours: Number(e.estimatedHours) || 0,
             confidence: clamp(Number(e.confidence) || 0, 0, 100),
             basis: {
-              paceMinutesPerHour: pace.paceMinutesPerHour ?? undefined,
+              paceMinutesPerHour: pace.paceMinutesPerHour ?? 0,
               observedSessions: pace.observedSessions,
             },
           },
