@@ -1,65 +1,163 @@
+"use client";
+
+import { useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { SidebarLayout } from "@/components/SidebarLayout";
-import { GlassCard } from "@/components/GlassCard";
-import { ProgressRing } from "@/components/ProgressRing";
+import { SyllabusUploader } from "@/components/SyllabusUploader";
+import { KnowledgeGraph } from "@/components/KnowledgeGraph";
+import { CalendarTimeline } from "@/components/CalendarTimeline";
+import { FocusTimer } from "@/components/FocusTimer";
+import { SessionAnalytics } from "@/components/SessionAnalytics";
 import { GradientButton } from "@/components/GradientButton";
 
+type Tab = "upload" | "graph" | "schedule" | "focus" | "analytics";
+
 export default function DashboardPage() {
+  const { user } = useUser();
+  const [activeTab, setActiveTab] = useState<Tab>("upload");
+  const [syllabusId, setSyllabusId] = useState<string | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("syllabus", file);
+      formData.append("userId", user?.id || "anonymous");
+      
+      const response = await fetch("/api/syllabus/upload", {
+        method: "POST",
+        body: formData,
+      });
+      
+      const data = await response.json();
+      if (data.ok && data.syllabus) {
+        setSyllabusId(data.syllabus._id);
+        alert("✅ Syllabus analyzed successfully!");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload syllabus");
+    }
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case "upload":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">
+                Upload Your Syllabus
+              </h1>
+              <p className="text-slate-400">
+                AI will analyze it and create your personalized study plan
+              </p>
+            </div>
+            <SyllabusUploader onFileUpload={handleFileUpload} />
+          </div>
+        );
+        
+      case "graph":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">
+                Learning Path Map
+              </h1>
+              <p className="text-slate-400">
+                Visualize topic dependencies and optimal learning order
+              </p>
+            </div>
+            <KnowledgeGraph 
+              syllabusId={syllabusId || undefined} 
+              userId={user?.id} 
+            />
+          </div>
+        );
+        
+      case "schedule":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">
+                Your Study Schedule
+              </h1>
+              <p className="text-slate-400">
+                Track your day-by-day study plan and progress
+              </p>
+            </div>
+            <CalendarTimeline 
+              planId={planId || undefined} 
+              userId={user?.id} 
+            />
+          </div>
+        );
+        
+      case "focus":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">
+                Focus Timer
+              </h1>
+              <p className="text-slate-400">
+                Pomodoro technique with distraction tracking
+              </p>
+            </div>
+            <FocusTimer 
+              userId={user?.id} 
+              planId={planId || undefined} 
+            />
+          </div>
+        );
+        
+      case "analytics":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-slate-50 mb-2">
+                Session Analytics
+              </h1>
+              <p className="text-slate-400">
+                Insights into your study habits and performance
+              </p>
+            </div>
+            <SessionAnalytics userId={user?.id} />
+          </div>
+        );
+        
+      default:
+        return null;
+    }
+  };
+
   return (
     <SidebarLayout>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)]">
-        <div className="flex flex-col gap-6">
-          <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-6">
-            <h1 className="text-2xl font-semibold text-slate-50">
-              Welcome back, planner-in-progress 👋
-            </h1>
-            <p className="mt-2 text-sm text-slate-300 max-w-xl">
-              This is your command center. Soon, your AI companion will adapt sessions around
-              energy levels, deadlines, and focus windows.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-4">
-              <GradientButton label="Create first study plan" href="/dashboard/plan" />
-              <span className="text-xs text-slate-400">
-                Takes under 60 seconds. No stress.
-              </span>
-            </div>
-          </GlassCard>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                Today&apos;s focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-50">Deep Work Block</p>
-              <p className="mt-1 text-xs text-slate-400">09:00 → 11:00 · 2 sessions</p>
-            </GlassCard>
-            <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                Upcoming
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-50">Exam in 7 days</p>
-              <p className="mt-1 text-xs text-slate-400">Planner will auto-ramp intensity.</p>
-            </GlassCard>
-            <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                Streak
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-50">3 days</p>
-              <p className="mt-1 text-xs text-slate-400">Consistency unlocks smarter schedules.</p>
-            </GlassCard>
-          </div>
-        </div>
-
-        <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-6 flex flex-col items-center justify-center gap-4">
-          <ProgressRing value={42} />
-          <p className="text-sm text-slate-300 text-center max-w-xs">
-            You&apos;re{" "}
-            <span className="font-semibold text-indigo-300">42% aligned</span> with
-            this week&apos;s study targets. The AI companion will smooth out your schedule as you
-            log more real sessions.
-          </p>
-        </GlassCard>
+      {/* Top Navigation Tabs */}
+      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
+        {[
+          { id: "upload", label: "📤 Upload", icon: "📤" },
+          { id: "graph", label: "🗺️ Graph", icon: "🗺️" },
+          { id: "schedule", label: "📅 Schedule", icon: "📅" },
+          { id: "focus", label: "⏱️ Focus", icon: "⏱️" },
+          { id: "analytics", label: "📊 Analytics", icon: "📊" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as Tab)}
+            className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-all ${
+              activeTab === tab.id
+                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
+                : "bg-white/5 text-slate-400 hover:bg-white/10"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
+
+      {/* Main Content */}
+      {renderContent()}
     </SidebarLayout>
   );
 }
-
