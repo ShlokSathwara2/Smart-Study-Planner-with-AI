@@ -1,65 +1,154 @@
-import Image from "next/image";
+import Link from "next/link";
+import { GradientButton } from "@/components/GradientButton";
+
+const features = [
+  {
+    icon: "🧠",
+    title: "AI-Powered Study Plans",
+    description:
+      "Upload your syllabus and Claude builds a personalised plan around your deadlines and learning pace.",
+  },
+  {
+    icon: "📊",
+    title: "Smart Topic Estimates",
+    description:
+      "AI analyses your historical focus sessions to predict exactly how long each topic will take you.",
+  },
+  {
+    icon: "⏱️",
+    title: "Focus Session Tracker",
+    description:
+      "Log real study time and watch the AI recalibrate your schedule in real time.",
+  },
+  {
+    icon: "🗺️",
+    title: "Topic Dependency Graph",
+    description:
+      "Visualise which topics unlock others so you always study in the right order.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="relative min-h-screen overflow-hidden bg-[#0f172a] text-slate-50 font-sans">
+      {/* Background glow blobs */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-indigo-600/20 blur-[120px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-[60%] -left-32 h-[400px] w-[400px] rounded-full bg-emerald-500/10 blur-[100px]"
+      />
+
+      {/* Nav */}
+      <header className="relative z-10 flex items-center justify-between px-6 py-5 sm:px-12">
+        <span className="text-lg font-semibold tracking-tight text-slate-50">
+          Smart<span className="text-indigo-400">Study</span>
+        </span>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/sign-in"
+            className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            Sign in
+          </Link>
+          <GradientButton label="Get started" href="/sign-up" />
+        </div>
+      </header>
+
+      {/* Hero */}
+      <main className="relative z-10 flex flex-col items-center px-6 pt-24 pb-32 text-center sm:pt-32">
+        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1.5 text-xs font-medium text-indigo-300 tracking-wide uppercase">
+          ✦ AI-Powered · Built with Claude
+        </span>
+
+        <h1 className="max-w-3xl text-4xl font-bold leading-tight tracking-tight text-slate-50 sm:text-6xl sm:leading-[1.1]">
+          Study smarter.
+          <br />
+          <span className="bg-gradient-to-r from-indigo-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+            Not harder.
+          </span>
+        </h1>
+
+        <p className="mt-6 max-w-xl text-base text-slate-400 sm:text-lg leading-relaxed">
+          Upload your syllabus, set your exam date, and let AI build a
+          personalised study plan that adapts to how you actually learn.
+        </p>
+
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <GradientButton label="Start planning for free →" href="/sign-up" className="px-8 py-3 text-base" />
+          <Link
+            href="/sign-in"
+            className="text-sm text-slate-400 hover:text-slate-200 underline underline-offset-4 transition-colors"
+          >
+            Already have an account?
+          </Link>
+        </div>
+
+        {/* Hero card mock */}
+        <div className="mt-20 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl shadow-black/60 p-6 text-left">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+            <span className="text-xs text-slate-400">Today&apos;s AI-generated plan</span>
+          </div>
+          <div className="grid gap-3">
+            {[
+              { topic: "Linear Algebra — Eigenvalues", time: "09:00 → 10:30", tag: "High priority" },
+              { topic: "Probability Theory — Bayes", time: "11:00 → 12:00", tag: "Review" },
+              { topic: "Algorithms — Dynamic Programming", time: "14:00 → 16:00", tag: "New topic" },
+            ].map((s) => (
+              <div
+                key={s.topic}
+                className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-800/60 px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-medium text-slate-100">{s.topic}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{s.time}</p>
+                </div>
+                <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-0.5 text-[11px] text-indigo-300">
+                  {s.tag}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-center text-xs text-slate-500">
+            Schedule auto-adjusted based on your 3-day focus history ✦
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
       </main>
+
+      {/* Features */}
+      <section className="relative z-10 px-6 pb-32 sm:px-12">
+        <h2 className="text-center text-2xl font-semibold text-slate-200 mb-10">
+          Everything your study session needs
+        </h2>
+        <div className="mx-auto grid max-w-4xl gap-5 sm:grid-cols-2">
+          {features.map((f) => (
+            <div
+              key={f.title}
+              className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-lg shadow-black/30"
+            >
+              <span className="text-3xl">{f.icon}</span>
+              <h3 className="mt-3 text-base font-semibold text-slate-100">{f.title}</h3>
+              <p className="mt-2 text-sm text-slate-400 leading-relaxed">{f.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="relative z-10 flex flex-col items-center gap-6 px-6 pb-28 text-center">
+        <h2 className="text-2xl font-bold text-slate-50 sm:text-3xl">
+          Ready to take control of your studies?
+        </h2>
+        <GradientButton label="Create your free account →" href="/sign-up" className="px-8 py-3 text-base" />
+      </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/5 py-8 text-center text-xs text-slate-500">
+        © {new Date().getFullYear()} SmartStudy · Powered by Claude AI
+      </footer>
     </div>
   );
 }
