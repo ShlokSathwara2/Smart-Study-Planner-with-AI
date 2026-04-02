@@ -13,8 +13,10 @@ import { FocusTimer } from "@/components/FocusTimer";
 import { SessionAnalytics } from "@/components/SessionAnalytics";
 import { CognitiveLoadTracker } from "@/components/CognitiveLoadTracker";
 import { DigitalTwinProfile } from "@/components/DigitalTwinProfile";
+import { VoiceInput } from "@/components/VoiceInput";
+import { StrategyChat } from "@/components/StrategyChat";
 
-type Tab = "home" | "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive" | "profile";
+type Tab = "home" | "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive" | "profile" | "voice" | "strategy";
 
 const TABS = [
   { id: "home",      icon: "🏠", label: "Home" },
@@ -24,6 +26,8 @@ const TABS = [
   { id: "focus",     icon: "⏱️", label: "Focus" },
   { id: "analytics", icon: "📊", label: "Analytics" },
   { id: "cognitive", icon: "🧠", label: "Cognitive Load" },
+  { id: "voice",     icon: "🎤", label: "Voice Log" },
+  { id: "strategy",  icon: "🧠", label: "AI Strategy" },
   { id: "profile",   icon: "👤", label: "My Profile" },
 ];
 
@@ -200,6 +204,8 @@ export default function DashboardPage() {
                   { icon: "🗺️", label: "Learning Map",        desc: "Explore topic dependencies",         tab: "graph" as Tab,     gradient: "from-violet-500/15 to-fuchsia-500/10  border-violet-500/25" },
                   { icon: "🧠", label: "Cognitive Analysis",  desc: "Check your mental load",              tab: "cognitive" as Tab, gradient: "from-amber-500/15 to-orange-500/10     border-amber-500/25" },
                   { icon: "📅", label: "Study Schedule",      desc: "Your day-by-day plan",                tab: "schedule" as Tab,  gradient: "from-rose-500/15 to-pink-500/10          border-rose-500/25" },
+                  { icon: "🎤", label: "Voice Log",           desc: "Log session with voice",              tab: "voice" as Tab,     gradient: "from-purple-500/15 to-indigo-500/10   border-purple-500/25" },
+                  { icon: "🧠", label: "AI Strategy",         desc: "Generate study plan",                tab: "strategy" as Tab,  gradient: "from-cyan-500/15 to-teal-500/10       border-cyan-500/25" },
                 ].map((item, i) => (
                   <motion.button
                     key={item.label}
@@ -316,6 +322,55 @@ export default function DashboardPage() {
               <p className="mt-1 text-slate-400 text-sm">AI Digital Twin analyzing your unique learning patterns</p>
             </div>
             <DigitalTwinProfile userId={user?.id} syllabusId={syllabusId || undefined} />
+          </div>
+        );
+
+      case "voice":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">🎤 Voice Session Logger</h1>
+              <p className="mt-1 text-slate-400 text-sm">Speak to log your study sessions automatically</p>
+            </div>
+            {syllabusId ? (
+              <GlassCard className="p-6 max-w-md mx-auto">
+                <VoiceInput 
+                  userId={user?.id || ''} 
+                  syllabusId={syllabusId}
+                  onSessionLogged={() => {
+                    // Refresh plan data if needed
+                    console.log('Session logged via voice');
+                  }}
+                />
+              </GlassCard>
+            ) : (
+              <GlassCard className="p-6">
+                <p className="text-slate-400 text-center">Please upload a syllabus first to use voice logging.</p>
+              </GlassCard>
+            )}
+          </div>
+        );
+
+      case "strategy":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-50">🧠 AI Strategy Generator</h1>
+              <p className="mt-1 text-slate-400 text-sm">Get personalized study strategies from AI</p>
+            </div>
+            {syllabusId ? (
+              <StrategyChat 
+                userId={user?.id || ''} 
+                syllabusId={syllabusId}
+                onStrategyGenerated={(strategy) => {
+                  console.log('Strategy generated:', strategy);
+                }}
+              />
+            ) : (
+              <GlassCard className="p-6">
+                <p className="text-slate-400 text-center">Please upload a syllabus first to generate strategies.</p>
+              </GlassCard>
+            )}
           </div>
         );
 
