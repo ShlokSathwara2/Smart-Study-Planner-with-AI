@@ -4,6 +4,8 @@ import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { GlassCard } from './GlassCard';
 
+const apiBase = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000") : "http://localhost:4000";
+
 interface VoiceInputProps {
   userId: string;
   syllabusId: string;
@@ -62,7 +64,7 @@ export function VoiceInput({ userId, syllabusId, onSessionLogged }: VoiceInputPr
       formData.append('userId', userId);
       formData.append('syllabusId', syllabusId);
 
-      const res = await fetch('/api/voice-input/log-session', {
+      const res = await fetch(`${apiBase}/api/voice-input/log-session`, {
         method: 'POST',
         body: formData,
       });

@@ -4,13 +4,15 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { GlassCard } from './GlassCard';
 
+const apiBase = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000") : "http://localhost:4000";
+
 interface StrategyChatProps {
   userId: string;
   syllabusId: string;
   onStrategyGenerated?: (strategy: any) => void;
 }
-
 interface DayPlan {
+
   day: number;
   date: string;
   topics: string[];
@@ -18,8 +20,8 @@ interface DayPlan {
   focus: string;
   tips: string;
 }
-
 interface GeneratedStrategy {
+
   summary: string;
   totalDays: number;
   dailyPlan: DayPlan[];
