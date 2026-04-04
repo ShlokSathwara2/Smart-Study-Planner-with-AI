@@ -40,7 +40,8 @@ async function analyzeDependenciesWithClaude(topics: string[]) {
   });
 
   if (!response.ok) {
-    throw new Error(`Claude dependency API error: ${response.status}`);
+    console.warn(`Claude dependency API error: ${response.status}. Using fallback linear graph.`);
+    return topics.map((t, i) => ({ topic: t, dependsOn: i > 0 ? [topics[i - 1]] : [] }));
   }
 
   const data = await response.json();

@@ -91,7 +91,12 @@ async function estimateWithClaude(input: {
   });
 
   if (!response.ok) {
-    throw new Error(`Claude estimate API error: ${response.status}`);
+    console.warn(`Claude estimate API error: ${response.status}. Using default estimates.`);
+    return input.topics.map((t) => ({
+      topic: t,
+      estimatedHours: 2,
+      confidence: 30,
+    }));
   }
 
   const data = await response.json();

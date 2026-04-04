@@ -66,7 +66,7 @@ export function DigitalTwinProfile({ userId, syllabusId }: DigitalTwinProfilePro
 
   const fetchDigitalTwin = async () => {
     try {
-      const response = await fetch(`/api/digital-twin/${syllabusId}?userId=${userId}`);
+      const response = await fetch(`${apiBase}/api/digital-twin/${syllabusId}?userId=${userId}`);
       const data = await response.json();
 
       if (data.ok && data.digitalTwin) {
@@ -84,7 +84,7 @@ export function DigitalTwinProfile({ userId, syllabusId }: DigitalTwinProfilePro
 
     setGenerating(true);
     try {
-      const response = await fetch(`/api/digital-twin/${syllabusId}/generate`, {
+      const response = await fetch(`${apiBase}/api/digital-twin/${syllabusId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, forceRegenerate: false }),

@@ -2,42 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
+import { motion, AnimatePresence } from "framer-motion";
 import { SidebarLayout } from "@/components/SidebarLayout";
 import { GlassCard } from "@/components/GlassCard";
-import { GradientButton } from "@/components/GradientButton";
 
 type StudySession = {
-  date: string;
-  startTime: string;
-  endTime: string;
-  topic: string;
-  unit?: string;
-  estimatedMinutes: number;
-  status?: "planned" | "done" | "skipped" | "partial";
-  actualMinutes?: number;
-  loggedAt?: string;
+  date: string; startTime: string; endTime: string; topic: string; unit?: string;
+  estimatedMinutes: number; status?: "planned" | "done" | "skipped" | "partial";
+  actualMinutes?: number; loggedAt?: string;
 };
-
-type StudyPlan = {
-  _id: string;
-  syllabusId: string;
-  examDate: string;
-  dailyHours: number;
-  sessions: StudySession[];
-};
-
-type TopicEstimate = {
-  topic: string;
-  estimatedHours: number;
-  confidence: number;
-};
+type StudyPlan = { _id: string; syllabusId: string; examDate: string; dailyHours: number; sessions: StudySession[]; };
+type TopicEstimate = { topic: string; estimatedHours: number; confidence: number; };
 
 function groupByDate(sessions: StudySession[]) {
   const map = new Map<string, StudySession[]>();
   for (const s of sessions) {
     const list = map.get(s.date) ?? [];
-    list.push(s);
-    map.set(s.date, list);
+    list.push(s); map.set(s.date, list);
   }
   for (const [k, list] of map.entries()) {
     list.sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -46,24 +27,25 @@ function groupByDate(sessions: StudySession[]) {
   return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
 }
 
-function statusBadgeClasses(status: StudySession["status"]) {
-  switch (status) {
-    case "done":
-      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-200";
-    case "partial":
-      return "border-amber-400/20 bg-amber-400/10 text-amber-200";
-    case "skipped":
-      return "border-slate-400/15 bg-white/5 text-slate-300";
-    default:
-      return "border-indigo-400/20 bg-indigo-400/10 text-indigo-200";
-  }
-}
+const STATUS_CONFIG = {
+  done:    { color: "#4ade80", bg: "rgba(74,222,128,0.10)",  border: "rgba(74,222,128,0.25)",  label: "Done" },
+  partial: { color: "#fbbf24", bg: "rgba(251,191,36,0.10)",  border: "rgba(251,191,36,0.25)",  label: "Partial" },
+  skipped: { color: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.18)", label: "Skipped" },
+  planned: { color: "#a5b4fc", bg: "rgba(165,180,252,0.08)", border: "rgba(165,180,252,0.18)", label: "Planned" },
+};
 
 export default function StudyPlanPage() {
   const { user } = useUser();
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
   const [syllabusId, setSyllabusId] = useState("");
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sid = new URLSearchParams(window.location.search).get("syllabusId");
+      if (sid) setSyllabusId(sid);
+    }
+  }, []);
+
   const [examDate, setExamDate] = useState("");
   const [dailyHours, setDailyHours] = useState(2);
   const [loading, setLoading] = useState(false);
@@ -73,411 +55,347 @@ export default function StudyPlanPage() {
   const [estimates, setEstimates] = useState<TopicEstimate[]>([]);
   const [behindDays, setBehindDays] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const dragRef = useRef<{ date: string; index: number } | null>(null);
 
   const grouped = useMemo(() => groupByDate(plan?.sessions ?? []), [plan?.sessions]);
-  const estimateMap = useMemo(() => {
-    const m = new Map<string, TopicEstimate>();
-    for (const e of estimates) m.set(e.topic, e);
-    return m;
-  }, [estimates]);
+  const estimateMap = useMemo(() => { const m = new Map<string, TopicEstimate>(); for (const e of estimates) m.set(e.topic, e); return m; }, [estimates]);
 
-  async function refreshEstimates(currentSyllabusId: string) {
-    const res = await fetch(`${apiBase}/api/estimates/refresh`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        userId: user?.id ?? "anonymous",
-        syllabusId: currentSyllabusId,
-      }),
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    setEstimates(Array.isArray(data?.estimates) ? data.estimates : []);
+  const doneCount = plan?.sessions.filter((s) => s.status === "done").length ?? 0;
+  const totalCount = plan?.sessions.length ?? 0;
+  const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+
+  async function refreshEstimates(sid: string) {
+    try {
+      const res = await fetch(`/api/estimates/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: user?.id ?? "anonymous", syllabusId: sid }) });
+      if (!res.ok) return;
+      const text = await res.text();
+      try {
+        const d = JSON.parse(text);
+        setEstimates(Array.isArray(d?.estimates) ? d.estimates : []);
+      } catch { /* ignore parse errors */ }
+    } catch { /* ignore network errors */ }
   }
 
-  async function refreshProgress(currentPlanId: string) {
-    const res = await fetch(
-      `${apiBase}/api/plan/${currentPlanId}/progress?userId=${encodeURIComponent(user?.id ?? "anonymous")}`,
-    );
-    if (!res.ok) return;
-    const data = await res.json();
-    setBehindDays(typeof data?.behindDays === "number" ? data.behindDays : null);
+  async function refreshProgress(pid: string) {
+    try {
+      const res = await fetch(`/api/plan/${pid}/progress?userId=${encodeURIComponent(user?.id ?? "anonymous")}`);
+      if (!res.ok) return;
+      const text = await res.text();
+      try {
+        const d = JSON.parse(text);
+        setBehindDays(typeof d?.behindDays === "number" ? d.behindDays : null);
+      } catch { /* ignore */ }
+    } catch { /* ignore */ }
   }
 
   async function onGenerate() {
-    setError(null);
-    setLoading(true);
-    setPlan(null);
-    setClashes([]);
-    setBehindDays(null);
-
+    setError(null); setLoading(true); setPlan(null); setClashes([]); setBehindDays(null);
     try {
-      if (!syllabusId.trim()) throw new Error("Please paste a syllabusId first.");
+      if (!syllabusId.trim()) throw new Error("Please enter a Syllabus ID first. Go to the Overview tab and upload your syllabus.");
       if (!examDate) throw new Error("Please select an exam date.");
       if (!dailyHours || dailyHours <= 0) throw new Error("Daily hours must be > 0.");
-
-      const res = await fetch(`${apiBase}/api/plan/generate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id ?? "anonymous",
-          syllabusId: syllabusId.trim(),
-          examDate,
-          dailyHours,
-        }),
+      const res = await fetch(`/api/plan/generate`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId: user?.id ?? "anonymous", syllabusId: syllabusId.trim(), examDate, dailyHours }),
       });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to generate plan.");
-
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch { throw new Error("Server returned an unexpected response. Please check the backend is running."); }
+      if (!res.ok) {
+        const msg = data?.error || "Failed to generate plan.";
+        if (msg.includes("No topic graph")) throw new Error("No topic graph found for this syllabus. Please go back to the Overview tab and re-upload your chapters first.");
+        throw new Error(msg);
+      }
       setPlan(data.plan);
       setClashes(Array.isArray(data.clashes) ? data.clashes : []);
-
-      await refreshEstimates(syllabusId.trim());
-      await refreshProgress(data.plan?._id);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong.");
-    } finally {
-      setLoading(false);
-    }
+      // Run background refreshes silently — errors here must never override the plan
+      refreshEstimates(syllabusId.trim());
+      refreshProgress(data.plan?._id);
+      setExpandedDate(null);
+    } catch (e: any) { setError(e?.message || "Something went wrong."); }
+    finally { setLoading(false); }
   }
 
-  async function saveSessions(updatedSessions: StudySession[]) {
+  async function saveSessions(sessions: StudySession[]) {
     if (!plan) return;
     setSaving(true);
     try {
-      const res = await fetch(`${apiBase}/api/plan/${plan._id}/sessions`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id ?? "anonymous",
-          sessions: updatedSessions,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to save changes.");
-      setPlan(data.plan);
-      setClashes(Array.isArray(data.clashes) ? data.clashes : []);
+      const res = await fetch(`${apiBase}/api/plan/${plan._id}/sessions`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: user?.id ?? "anonymous", sessions }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.error || "Failed to save.");
+      setPlan(d.plan); setClashes(Array.isArray(d.clashes) ? d.clashes : []);
       await refreshProgress(plan._id);
-    } catch (e: any) {
-      setError(e?.message || "Failed to save changes.");
-    } finally {
-      setSaving(false);
-    }
+    } catch (e: any) { setError(e?.message || "Failed to save."); }
+    finally { setSaving(false); }
   }
 
-  async function updateSessionLog(sessionIndex: number, payload: { status?: StudySession["status"]; actualMinutes?: number }) {
+  async function updateSessionLog(idx: number, payload: { status?: StudySession["status"]; actualMinutes?: number }) {
     if (!plan) return;
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
-      const res = await fetch(`${apiBase}/api/plan/${plan._id}/session`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id ?? "anonymous",
-          sessionIndex,
-          ...payload,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to update session.");
-      setPlan(data.plan);
+      const res = await fetch(`${apiBase}/api/plan/${plan._id}/session`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: user?.id ?? "anonymous", sessionIndex: idx, ...payload }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.error || "Failed to update.");
+      setPlan(d.plan);
       await refreshProgress(plan._id);
       await refreshEstimates(plan.syllabusId);
-    } catch (e: any) {
-      setError(e?.message || "Failed to update session.");
-    } finally {
-      setSaving(false);
-    }
+    } catch (e: any) { setError(e?.message || "Failed to update."); }
+    finally { setSaving(false); }
   }
 
   async function autoReschedule() {
     if (!plan) return;
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
-      const res = await fetch(`${apiBase}/api/plan/${plan._id}/reschedule`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id ?? "anonymous",
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to reschedule.");
-      setPlan(data.plan);
-      await refreshProgress(plan._id);
-    } catch (e: any) {
-      setError(e?.message || "Failed to reschedule.");
-    } finally {
-      setSaving(false);
-    }
+      const res = await fetch(`${apiBase}/api/plan/${plan._id}/reschedule`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: user?.id ?? "anonymous" }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.error || "Failed to reschedule.");
+      setPlan(d.plan); await refreshProgress(plan._id);
+    } catch (e: any) { setError(e?.message || "Failed to reschedule."); }
+    finally { setSaving(false); }
   }
 
-  function onDragStart(date: string, index: number) {
-    dragRef.current = { date, index };
-  }
-
+  function onDragStart(date: string, index: number) { dragRef.current = { date, index }; }
   function onDrop(targetDate: string) {
     if (!plan) return;
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag) return;
-
+    const drag = dragRef.current; dragRef.current = null; if (!drag) return;
     const updated = [...plan.sessions];
     const group = grouped.find(([d]) => d === drag.date)?.[1] ?? [];
-    const session = group[drag.index];
-    if (!session) return;
-
-    // find original absolute index in plan.sessions
-    const absIndex = updated.findIndex(
-      (s) =>
-        s.date === session.date &&
-        s.startTime === session.startTime &&
-        s.endTime === session.endTime &&
-        s.topic === session.topic,
-    );
+    const session = group[drag.index]; if (!session) return;
+    const absIndex = updated.findIndex((s) => s.date === session.date && s.startTime === session.startTime && s.topic === session.topic);
     if (absIndex === -1) return;
-
     updated[absIndex] = { ...updated[absIndex], date: targetDate, status: updated[absIndex].status ?? "planned" };
     setPlan({ ...plan, sessions: updated });
   }
 
-  useEffect(() => {
-    if (plan?._id) {
-      refreshProgress(plan._id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan?._id]);
+  useEffect(() => { if (plan?._id) refreshProgress(plan._id); }, [plan?._id]);
+
+  const inputStyle = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" };
 
   return (
     <SidebarLayout>
-      <div className="flex flex-col gap-6">
-        <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-6">
-          <h1 className="text-2xl font-semibold text-slate-50">Generate your study plan</h1>
-          <p className="mt-2 text-sm text-slate-300 max-w-2xl">
-            Paste your <span className="text-indigo-200 font-medium">syllabusId</span> (from the syllabus upload step),
-            choose your exam date, and set how many hours you can study per day.
-          </p>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                Syllabus ID
-              </label>
-              <input
-                value={syllabusId}
-                onChange={(e) => setSyllabusId(e.target.value)}
-                placeholder="e.g. 65f2c0e9a8..."
-                className="h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-indigo-400/60"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                Exam date
-              </label>
-              <input
-                type="date"
-                value={examDate}
-                onChange={(e) => setExamDate(e.target.value)}
-                className="h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-slate-100 outline-none focus:border-indigo-400/60"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                Daily hours
-              </label>
-              <input
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={dailyHours}
-                onChange={(e) => setDailyHours(Number(e.target.value))}
-                className="h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-slate-100 outline-none focus:border-indigo-400/60"
-              />
+      <div className="space-y-5">
+        {/* Config card */}
+        <GlassCard glow glowColor="indigo" className="p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-10 w-10 rounded-xl flex items-center justify-center text-xl"
+              style={{ background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.3)" }}>📅</div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-50">Generate Study Plan</h1>
+              <p className="text-xs text-slate-500 mt-0.5">Claude builds a day-by-day schedule from your syllabus</p>
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center gap-4">
-            <GradientButton
-              label={loading ? "Generating..." : "Generate plan"}
-              disabled={loading}
-              onClick={onGenerate}
-              className={loading ? "opacity-70 cursor-not-allowed" : ""}
-            />
-            <span className="text-xs text-slate-400">
-              Uses your topic dependency graph + Claude to build a day-by-day schedule.
-            </span>
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              { label: "Syllabus ID", placeholder: "e.g. 65f2c0e9a8…", value: syllabusId, onChange: (v: string) => setSyllabusId(v), type: "text" },
+              { label: "Exam Date",   placeholder: "", value: examDate, onChange: (v: string) => setExamDate(v), type: "date" },
+              { label: "Daily Hours", placeholder: "2", value: dailyHours, onChange: (v: string) => setDailyHours(Number(v)), type: "number" },
+            ].map((f) => (
+              <div key={f.label} className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{f.label}</label>
+                <input type={f.type} value={f.value} onChange={(e) => f.onChange(e.target.value)}
+                  placeholder={f.placeholder} min={f.type === "number" ? 0.5 : undefined} step={f.type === "number" ? 0.5 : undefined}
+                  className="h-10 w-full rounded-xl px-3 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus-glow transition-all"
+                  style={inputStyle} />
+              </div>
+            ))}
           </div>
 
-          {error && (
-            <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {error}
-            </div>
-          )}
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <motion.button whileHover={{ scale: 1.03, y: -1 }} whileTap={{ scale: 0.97 }} onClick={onGenerate} disabled={loading}
+              className="rounded-xl px-6 py-2.5 text-sm font-bold text-white disabled:opacity-60 glass-shine"
+              style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", boxShadow: "0 4px 18px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.15)" }}>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} className="inline-block">⚙️</motion.span>
+                  Generating…
+                </span>
+              ) : "✨ Generate Plan"}
+            </motion.button>
+            <p className="text-xs text-slate-600">Uses topic dependency graph + Claude AI</p>
+          </div>
+
+          <AnimatePresence>
+            {error && (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="mt-4 rounded-xl px-4 py-3 text-sm text-rose-300"
+                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.22)" }}>
+                ⚠️ {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </GlassCard>
 
-        {plan && behindDays != null && behindDays > 0 && (
-          <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-5 border border-amber-400/20">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-amber-200">
-                  You are {behindDays} day{behindDays === 1 ? "" : "s"} behind
-                </p>
-                <p className="mt-1 text-xs text-slate-300">
-                  Missed sessions are still marked as planned. Use recovery to redistribute the remaining workload.
-                </p>
-              </div>
-              <button
-                onClick={autoReschedule}
-                className="text-xs rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-amber-100 hover:bg-amber-400/15 transition"
-                disabled={saving}
-              >
-                {saving ? "Working..." : "AI recovery plan"}
-              </button>
-            </div>
-          </GlassCard>
-        )}
+        {/* Behind days alert */}
+        <AnimatePresence>
+          {plan && behindDays != null && behindDays > 0 && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <GlassCard className="p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-300">You are {behindDays} day{behindDays === 1 ? "" : "s"} behind schedule</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Missed sessions are still planned. Use recovery to redistribute workload.</p>
+                  </div>
+                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={autoReschedule} disabled={saving}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-amber-200 disabled:opacity-60"
+                    style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.28)" }}>
+                    {saving ? "Working…" : "🔄 AI Recovery Plan"}
+                  </motion.button>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
+        {/* Clashes */}
         {clashes.length > 0 && (
-          <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-5 border border-amber-400/20">
-            <p className="text-sm font-medium text-amber-200">Schedule clashes detected</p>
-            <p className="mt-1 text-xs text-slate-300">
-              Some sessions overlap (inside the generated plan). We can auto-fix these in Phase 6 drag-and-drop / reschedule.
-            </p>
+          <GlassCard className="p-4">
+            <p className="text-sm font-semibold text-amber-300 mb-1">⚡ Schedule clashes detected</p>
+            <p className="text-xs text-slate-400">Some sessions overlap. Drag-and-drop to resolve, then save.</p>
           </GlassCard>
         )}
 
-        {plan && (
-          <GlassCard className="bg-[rgba(15,23,42,0.92)]/70 p-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-50">Your timeline</h2>
-                <p className="mt-1 text-xs text-slate-400">
-                  Exam date: <span className="text-slate-200 font-medium">{plan.examDate}</span> · Daily hours:{" "}
-                  <span className="text-slate-200 font-medium">{plan.dailyHours}</span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => refreshEstimates(plan.syllabusId)}
-                  className="text-xs rounded-full border border-white/10 bg-white/5 px-4 py-2 text-slate-200 hover:bg-white/10 transition"
-                >
-                  Refresh AI time estimates
-                </button>
-                <button
-                  onClick={() => plan && saveSessions(plan.sessions)}
-                  className="text-xs rounded-full border border-indigo-400/20 bg-indigo-400/10 px-4 py-2 text-indigo-100 hover:bg-indigo-400/15 transition disabled:opacity-60"
-                  disabled={saving}
-                >
-                  {saving ? "Saving..." : "Save changes"}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-col gap-6">
-              {grouped.map(([date, sessions]) => (
-                <div
-                  key={date}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => onDrop(date)}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{date}</p>
-                  <div className="mt-3 grid gap-3">
-                    {sessions.map((s, idx) => {
-                      const est = estimateMap.get(s.topic);
-                      const status = s.status ?? "planned";
-                      return (
-                        <div
-                          key={`${s.topic}-${s.startTime}-${idx}`}
-                          draggable
-                          onDragStart={() => onDragStart(date, idx)}
-                          className="flex flex-col gap-2 rounded-xl border border-white/10 bg-[rgba(30,41,59,0.55)]/70 px-4 py-3 cursor-grab active:cursor-grabbing"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <p className="text-sm font-medium text-slate-50">{s.topic}</p>
-                            <p className="text-xs text-slate-300">
-                              {s.startTime}–{s.endTime} · {Math.round(s.estimatedMinutes)}m
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                            {est ? (
-                              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-emerald-200">
-                                est. {Number(est.estimatedHours).toFixed(1)} hrs · {Math.round(est.confidence)}% confidence
-                              </span>
-                            ) : (
-                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
-                                no estimate yet
-                              </span>
-                            )}
-                            <span className={`rounded-full border px-3 py-1 ${statusBadgeClasses(status)}`}>
-                              status: {status}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={() => {
-                                const absIndex = plan.sessions.findIndex(
-                                  (x) =>
-                                    x.date === s.date &&
-                                    x.startTime === s.startTime &&
-                                    x.endTime === s.endTime &&
-                                    x.topic === s.topic,
-                                );
-                                if (absIndex >= 0) updateSessionLog(absIndex, { status: "done", actualMinutes: s.actualMinutes ?? s.estimatedMinutes });
-                              }}
-                              className="text-xs rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-emerald-100 hover:bg-emerald-400/15 transition"
-                            >
-                              Mark done
-                            </button>
-                            <button
-                              onClick={() => {
-                                const absIndex = plan.sessions.findIndex(
-                                  (x) =>
-                                    x.date === s.date &&
-                                    x.startTime === s.startTime &&
-                                    x.endTime === s.endTime &&
-                                    x.topic === s.topic,
-                                );
-                                if (absIndex >= 0) updateSessionLog(absIndex, { status: "partial", actualMinutes: Math.round((s.actualMinutes ?? s.estimatedMinutes) * 0.5) });
-                              }}
-                              className="text-xs rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-amber-100 hover:bg-amber-400/15 transition"
-                            >
-                              Partial
-                            </button>
-                            <button
-                              onClick={() => {
-                                const absIndex = plan.sessions.findIndex(
-                                  (x) =>
-                                    x.date === s.date &&
-                                    x.startTime === s.startTime &&
-                                    x.endTime === s.endTime &&
-                                    x.topic === s.topic,
-                                );
-                                if (absIndex >= 0) updateSessionLog(absIndex, { status: "skipped", actualMinutes: 0 });
-                              }}
-                              className="text-xs rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200 hover:bg-white/10 transition"
-                            >
-                              Skip
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+        {/* Plan timeline */}
+        <AnimatePresence>
+          {plan && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              {/* Progress header */}
+              <GlassCard className="p-5 mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="font-bold text-slate-100">Your Study Timeline</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Exam: <span className="text-slate-300">{plan.examDate}</span> · {plan.dailyHours}h/day · {totalCount} sessions</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={() => refreshEstimates(plan.syllabusId)}
+                      className="text-xs rounded-xl px-3 py-2 text-slate-300"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}>
+                      🔄 Refresh Estimates
+                    </motion.button>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={() => plan && saveSessions(plan.sessions)} disabled={saving}
+                      className="text-xs rounded-xl px-3 py-2 text-indigo-200 disabled:opacity-60"
+                      style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)" }}>
+                      {saving ? "Saving…" : "💾 Save Changes"}
+                    </motion.button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </GlassCard>
-        )}
+                {/* Progress bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>{doneCount} of {totalCount} sessions done</span>
+                    <span className="text-indigo-400 font-semibold">{progressPct}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                    <motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPct}%` }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      style={{ background: "linear-gradient(90deg, #6366f1, #a78bfa, #34d399)" }} />
+                  </div>
+                </div>
+              </GlassCard>
+
+              {/* Day cards */}
+              <div className="space-y-3">
+                {grouped.map(([date, sessions], di) => {
+                  const isExpanded = expandedDate === date || expandedDate === null;
+                  const dayDone = sessions.filter((s) => s.status === "done").length;
+                  const allDone = dayDone === sessions.length;
+                  return (
+                    <motion.div key={date} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: di * 0.04 }} className="rounded-2xl overflow-hidden"
+                      style={{ backdropFilter: "blur(24px)", background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)", border: `1px solid ${allDone ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.08)"}`, boxShadow: "0 2px 16px rgba(0,0,0,0.2)" }}
+                      onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(date)}>
+                      {/* Day header */}
+                      <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition"
+                        onClick={() => setExpandedDate(expandedDate === date ? null : date)}>
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-xl flex items-center justify-center text-sm font-bold"
+                            style={allDone
+                              ? { background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }
+                              : { background: "rgba(99,102,241,0.12)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.2)" }}>
+                            {allDone ? "✓" : di + 1}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{date}</p>
+                            <p className="text-[10px] text-slate-600">{sessions.length} session{sessions.length !== 1 ? "s" : ""} · {dayDone} done</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-1">
+                            {sessions.map((s, i) => {
+                              const sc = STATUS_CONFIG[s.status || "planned"];
+                              return <div key={i} className="h-1.5 w-1.5 rounded-full" style={{ background: sc.color }} />;
+                            })}
+                          </div>
+                          <span className="text-slate-600 text-sm">{expandedDate === date ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+
+                      <AnimatePresence>
+                        {(expandedDate === date || expandedDate === null) && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                            <div className="px-5 pb-4 space-y-2.5 border-t border-white/[0.05] pt-3">
+                              {sessions.map((s, idx) => {
+                                const est = estimateMap.get(s.topic);
+                                const status = s.status ?? "planned";
+                                const sc = STATUS_CONFIG[status];
+                                const absIndex = plan.sessions.findIndex((x) => x.date === s.date && x.startTime === s.startTime && x.topic === s.topic);
+                                return (
+                                  <motion.div key={`${s.topic}-${idx}`} draggable onDragStart={() => onDragStart(date, idx)}
+                                    whileHover={{ x: 3 }} className="rounded-xl p-4 cursor-grab active:cursor-grabbing"
+                                    style={{ background: `linear-gradient(135deg, ${sc.bg} 0%, rgba(255,255,255,0.02) 100%)`, border: `1px solid ${sc.border}` }}>
+                                    <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                                      <p className="font-semibold text-sm text-slate-100">{s.topic}</p>
+                                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                                        <span>{s.startTime}–{s.endTime}</span>
+                                        <span>·</span>
+                                        <span>{Math.round(s.estimatedMinutes)}m</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                                      {est && (
+                                        <span className="text-[10px] rounded-full px-2.5 py-1 text-emerald-300"
+                                          style={{ background: "rgba(52,211,153,0.10)", border: "1px solid rgba(52,211,153,0.25)" }}>
+                                          est. {Number(est.estimatedHours).toFixed(1)}h · {Math.round(est.confidence)}% conf.
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] rounded-full px-2.5 py-1 font-medium" style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}>
+                                        {sc.label}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {[
+                                        { label: "✓ Done",    status: "done"    as const, mins: s.actualMinutes ?? s.estimatedMinutes },
+                                        { label: "½ Partial", status: "partial" as const, mins: Math.round((s.actualMinutes ?? s.estimatedMinutes) * 0.5) },
+                                        { label: "— Skip",    status: "skipped" as const, mins: 0 },
+                                      ].map((btn) => (
+                                        <motion.button key={btn.status} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                          onClick={() => absIndex >= 0 && updateSessionLog(absIndex, { status: btn.status, actualMinutes: btn.mins })}
+                                          className="text-[11px] rounded-lg px-3 py-1.5 font-medium transition-all"
+                                          style={status === btn.status
+                                            ? { background: STATUS_CONFIG[btn.status].bg, border: `1px solid ${STATUS_CONFIG[btn.status].color}`, color: STATUS_CONFIG[btn.status].color }
+                                            : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}>
+                                          {btn.label}
+                                        </motion.button>
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </SidebarLayout>
   );
 }
-

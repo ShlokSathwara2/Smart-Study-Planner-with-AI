@@ -63,7 +63,10 @@ router.post('/generate', async (req, res): Promise<void> => {
     });
 
     if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
+      console.warn(`Claude API error generating quiz: ${response.status}. Using fallback questions.`);
+      const questions = generateFallbackQuestions(topic, numQuestions);
+      res.json({ ok: true, questions, note: 'Using fallback questions due to API error' });
+      return;
     }
 
     const data = await response.json();

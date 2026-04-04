@@ -39,32 +39,57 @@ const STAT_CARDS = [
 ];
 
 function StatCard({ s, i }: { s: typeof STAT_CARDS[0]; i: number }) {
+  const glowMap: Record<string, string> = {
+    "text-orange-300":  "rgba(251,146,60,0.18)",
+    "text-emerald-300": "rgba(52,211,153,0.18)",
+    "text-sky-300":     "rgba(125,211,252,0.18)",
+    "text-violet-300":  "rgba(167,139,250,0.18)",
+  };
+  const borderMap: Record<string, string> = {
+    "text-orange-300":  "rgba(251,146,60,0.25)",
+    "text-emerald-300": "rgba(52,211,153,0.25)",
+    "text-sky-300":     "rgba(125,211,252,0.25)",
+    "text-violet-300":  "rgba(167,139,250,0.25)",
+  };
+  const barMap: Record<string, string> = {
+    "text-orange-300":  "linear-gradient(90deg,#f97316,#fb923c)",
+    "text-emerald-300": "linear-gradient(90deg,#10b981,#34d399)",
+    "text-sky-300":     "linear-gradient(90deg,#0ea5e9,#38bdf8)",
+    "text-violet-300":  "linear-gradient(90deg,#7c3aed,#a78bfa)",
+  };
+  const barW = s.unit === "%" ? `${s.value}%` : s.unit === "days" ? "70%" : s.unit === "hrs" ? "55%" : "30%";
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.08, duration: 0.5, ease: "easeOut" }}
-      whileHover={{ y: -4, scale: 1.02 }}
-      whileTap={{ scale: 0.97 }}
-      className={`relative rounded-2xl border bg-gradient-to-br p-5 cursor-default ${s.color}`}
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: i * 0.08, duration: 0.45, ease: "easeOut" }}
+      whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.97 }}
+      className="relative rounded-2xl overflow-hidden cursor-default glass-shine"
+      style={{
+        background: `linear-gradient(135deg, ${glowMap[s.text] || "rgba(99,102,241,0.12)"} 0%, rgba(255,255,255,0.03) 100%)`,
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        border: `1px solid ${borderMap[s.text] || "rgba(255,255,255,0.1)"}`,
+        boxShadow: `0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.07)`,
+      }}
     >
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-2xl">{s.icon}</span>
-        <div className="h-1.5 w-1.5 rounded-full bg-emerald-400/70 animate-pulse" />
-      </div>
-      <p className={`text-3xl font-bold ${s.text}`}>
-        {s.value}<span className="text-sm font-medium ml-1 opacity-70">{s.unit}</span>
-      </p>
-      <p className="mt-1 text-xs text-slate-400">{s.label}</p>
-      {/* animated bottom bar */}
-      <div className="mt-3 h-0.5 w-full rounded-full bg-white/5 overflow-hidden">
-        <motion.div
-          className={`h-full rounded-full ${s.text.replace("text-", "bg-")}`}
-          initial={{ width: 0 }}
-          animate={{ width: s.label === "Session Analytics" ? "100%" : `${parseInt(s.value) / (s.unit === "%" ? 1 : 40) * 100}%` }}
-          style={{ width: s.unit === "%" ? `${s.value}%` : s.unit === "days" ? "70%" : s.unit === "hrs" ? "50%" : "30%" }}
-          transition={{ delay: i * 0.08 + 0.4, duration: 1, ease: "easeOut" }}
-        />
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-3">
+          <span className="text-2xl">{s.icon}</span>
+          <div className="flex items-center gap-1.5">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shadow shadow-emerald-400/60" />
+            <span className="text-[9px] text-emerald-400/70 font-medium uppercase tracking-widest">Live</span>
+          </div>
+        </div>
+        <p className={`text-3xl font-bold tabular-nums ${s.text} animate-number-up`}>
+          {s.value}<span className="text-sm font-medium ml-1 opacity-60">{s.unit}</span>
+        </p>
+        <p className="mt-1 text-xs text-slate-500 font-medium">{s.label}</p>
+        <div className="mt-3 h-0.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+          <motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: barW }}
+            style={{ background: barMap[s.text] || "linear-gradient(90deg,#6366f1,#a78bfa)" }}
+            transition={{ delay: i * 0.08 + 0.5, duration: 1.1, ease: "easeOut" }} />
+        </div>
       </div>
     </motion.div>
   );
@@ -118,18 +143,23 @@ export default function DashboardPage() {
   // Prevent flash while checking onboarding state
   if (!isLoaded || (user && !user.unsafeMetadata?.onboarded)) {
     return (
-      <div className="min-h-screen bg-[#080f1e] flex flex-col items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-4" />
-        <p className="text-slate-400 text-sm animate-pulse">Loading workspace...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: "#060818" }}>
+        <div className="relative mb-6">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-indigo-500/40">S</div>
+          <div className="absolute -inset-2 rounded-2xl border border-indigo-500/30 animate-ping opacity-30" />
+        </div>
+        <p className="text-slate-500 text-sm animate-pulse tracking-wide">Loading workspace...</p>
       </div>
     );
   }
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
   const handleSyllabusSubmit = async (data: any) => {
     try {
       const formData = new FormData();
       formData.append("userId", user?.id || "anonymous");
-      formData.append("grade", grade || "Unknown"); // Pass grade to adapt planning
+      formData.append("grade", grade || "Unknown");
 
       if (data.type === "file") {
         formData.append("syllabus", data.file);
@@ -141,27 +171,43 @@ export default function DashboardPage() {
         formData.append("referenceBook", data.referenceBook);
       }
 
+      // Use Next.js proxy (/api/...) so auth cookies & CORS are handled correctly
       const response = await fetch(`/api/syllabus/upload`, {
         method: "POST",
         body: formData,
       });
-      const responseData = await response.json();
-      
+      const text = await response.text();
+      let responseData: any = {};
+      try { responseData = JSON.parse(text); } catch { throw new Error("Server error during upload. Is the backend running?"); }
+
       if (responseData.ok && responseData.syllabus) {
-        setSyllabusId(responseData.syllabus._id);
-        const graphResponse = await fetch(
-          `/api/graph/from-syllabus/${responseData.syllabus._id}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user?.id }) }
-        );
-        if (graphResponse.ok) console.log("Topic graph generated");
+        const sid = responseData.syllabus._id;
+        setSyllabusId(sid);
+
+        // Build topic graph — use proxy, pass real userId
+        try {
+          const graphResponse = await fetch(`/api/graph/from-syllabus/${sid}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user?.id }),
+          });
+          if (graphResponse.ok) console.log("✅ Topic graph generated for", sid);
+          else console.warn("⚠️ Topic graph generation failed (will retry on plan page)");
+        } catch (graphErr) {
+          console.warn("⚠️ Topic graph network error:", graphErr);
+        }
+
+        router.push(`/dashboard/plan?syllabusId=${sid}`);
         return true;
       }
-      return false;
-    } catch (error) {
+
+      throw new Error(responseData.error || "Failed to process syllabus");
+    } catch (error: any) {
       console.error("Upload error:", error);
-      return false;
+      throw error;
     }
   };
+
 
   const renderContent = () => {
     switch (activeTab) {
@@ -215,11 +261,18 @@ export default function DashboardPage() {
                     whileHover={{ y: -4, scale: 1.02 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => setActiveTab(item.tab)}
-                    className={`text-left rounded-2xl border bg-gradient-to-br p-5 transition-shadow hover:shadow-lg hover:shadow-black/30 ${item.gradient}`}
+                    className="text-left rounded-2xl p-5 glass-shine"
+                    style={{
+                      background: `linear-gradient(135deg, ${item.gradient.split(' ')[0].replace('from-','').includes('/') ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.10)'} 0%, rgba(255,255,255,0.025) 100%)`,
+                      backdropFilter: "blur(24px)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)",
+                      transition: "all 0.2s ease",
+                    }}
                   >
                     <span className="text-2xl">{item.icon}</span>
-                    <p className="mt-3 text-sm font-semibold text-slate-100">{item.label}</p>
-                    <p className="mt-1 text-xs text-slate-400 leading-relaxed">{item.desc}</p>
+                    <p className="mt-3 text-sm font-bold text-slate-100">{item.label}</p>
+                    <p className="mt-1 text-xs text-slate-500 leading-relaxed">{item.desc}</p>
                   </motion.button>
                 ))}
               </div>

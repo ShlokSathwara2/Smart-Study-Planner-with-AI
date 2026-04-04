@@ -92,7 +92,27 @@ async function generatePlanWithClaude(input: {
   });
 
   if (!response.ok) {
-    throw new Error(`Claude plan API error: ${response.status}`);
+    console.warn(`Claude plan API error: ${response.status}. Using fallback mock plan.`);
+    let hour = 18;
+    const d = new Date(input.examDate);
+    return {
+      sessions: input.topics.map((t, idx) => {
+        const sessionDate = new Date(d);
+        sessionDate.setDate(d.getDate() - (input.topics.length - idx)); // spread backward from exam date
+        const yyyy = sessionDate.getFullYear();
+        const mm = String(sessionDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(sessionDate.getDate()).padStart(2, '0');
+        const session = {
+          date: `${yyyy}-${mm}-${dd}`,
+          startTime: `${String(hour).padStart(2, '0')}:00`,
+          endTime: `${String(hour + 1).padStart(2, '0')}:00`,
+          topic: t.topic,
+          estimatedMinutes: 60,
+        };
+        hour = (hour + 1) > 22 ? 18 : hour + 1;
+        return session;
+      })
+    };
   }
 
   const data = await response.json();
@@ -150,7 +170,8 @@ async function rescheduleWithClaude(input: {
   });
 
   if (!response.ok) {
-    throw new Error(`Claude reschedule API error: ${response.status}`);
+    console.warn(`Claude reschedule API error: ${response.status}. Keeping existing remaining sessions.`);
+    return { sessions: input.remainingSessions };
   }
 
   const data = await response.json();

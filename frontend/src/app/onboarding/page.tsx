@@ -5,7 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
-const GRADES = ["Class 9", "Class 10", "Class 11", "Class 12", "Undergraduate", "Postgraduate", "Professional"];
+const GRADES = ["Class 9","Class 10","Class 11","Class 12","Undergraduate","Postgraduate","Professional"];
 const GOALS = [
   { icon: "🏆", label: "Ace my exams" },
   { icon: "📚", label: "Build strong fundamentals" },
@@ -18,19 +18,16 @@ const GOALS = [
 export default function OnboardingPage() {
   const { user } = useUser();
   const router = useRouter();
-
   const [step, setStep] = useState(0);
   const [name, setName] = useState(user?.firstName || "");
   const [age, setAge] = useState("");
   const [grade, setGrade] = useState("");
   const [goals, setGoals] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-
   const totalSteps = 4;
 
   const handleFinish = async () => {
     setSaving(true);
-    // Save to Clerk metadata
     await user?.update({
       unsafeMetadata: {
         onboarded: true,
@@ -40,8 +37,8 @@ export default function OnboardingPage() {
         goal: goals.join(", "),
       },
     });
-    await user?.reload(); // Ensure local client knows about update
-    window.location.href = "/dashboard"; // Full reload avoids any lingering middleware state
+    await user?.reload();
+    window.location.href = "/dashboard";
   };
 
   const canNext = () => {
@@ -53,210 +50,160 @@ export default function OnboardingPage() {
   };
 
   const stepVariants = {
-    initial: { opacity: 0, x: 40 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: -40 },
+    initial: { opacity: 0, x: 30, filter: "blur(4px)" },
+    animate: { opacity: 1, x: 0, filter: "blur(0px)" },
+    exit: { opacity: 0, x: -30, filter: "blur(4px)" },
   };
 
-  return (
-    <div className="relative min-h-screen bg-[#080f1e] flex items-center justify-center px-4 overflow-hidden">
-      {/* Background orbs */}
-      <div className="pointer-events-none absolute top-[-200px] left-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/15 blur-[100px] animate-float" />
-      <div className="pointer-events-none absolute bottom-[-100px] right-[5%] h-[400px] w-[400px] rounded-full bg-violet-600/10 blur-[90px] animate-float-reverse" />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, rgba(99,102,241,0.06) 1px, transparent 0)",
-          backgroundSize: "48px 48px",
-        }}
-      />
+  const stepColors = [
+    { from: "#6366f1", to: "#8b5cf6", shadow: "rgba(99,102,241,0.4)" },
+    { from: "#0ea5e9", to: "#6366f1", shadow: "rgba(14,165,233,0.4)" },
+    { from: "#8b5cf6", to: "#ec4899", shadow: "rgba(139,92,246,0.4)" },
+    { from: "#10b981", to: "#6366f1", shadow: "rgba(16,185,129,0.4)" },
+  ];
+  const sc = stepColors[step] || stepColors[0];
 
-      <div className="w-full max-w-lg z-10">
-        {/* Progress bar */}
+  return (
+    <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden" style={{ background: "#060818" }}>
+      {/* BG orbs */}
+      <div className="pointer-events-none absolute top-[-180px] left-[8%] h-[600px] w-[600px] rounded-full blur-[110px] animate-float"
+        style={{ background: "radial-gradient(circle, rgba(99,102,241,0.14) 0%, transparent 70%)" }} />
+      <div className="pointer-events-none absolute bottom-[-100px] right-[5%] h-[450px] w-[450px] rounded-full blur-[100px] animate-float-reverse"
+        style={{ background: "radial-gradient(circle, rgba(139,92,246,0.11) 0%, transparent 70%)" }} />
+      <div className="pointer-events-none absolute top-[40%] right-[20%] h-[250px] w-[250px] rounded-full blur-[80px]"
+        style={{ background: "radial-gradient(circle, rgba(34,211,238,0.06) 0%, transparent 70%)" }} />
+      {/* Grid */}
+      <div className="pointer-events-none absolute inset-0"
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(99,102,241,0.05) 1px, transparent 0)", backgroundSize: "44px 44px" }} />
+
+      <div className="w-full max-w-md z-10">
+        {/* Progress */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-xs text-slate-500 font-medium tracking-wide">
-              Step {step + 1} of {totalSteps}
-            </span>
-            <span className="text-xs text-indigo-400 font-medium">
-              {Math.round(((step + 1) / totalSteps) * 100)}% complete
-            </span>
-          </div>
-          <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
-              initial={{ width: 0 }}
-              animate={{ width: `${((step + 1) / totalSteps) * 100}%` }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-            />
+            <div className="flex items-center gap-2">
+              {Array.from({ length: totalSteps }).map((_, i) => (
+                <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i <= step ? "w-8" : "w-3"}`}
+                  style={{
+                    background: i <= step
+                      ? `linear-gradient(90deg, ${sc.from}, ${sc.to})`
+                      : "rgba(255,255,255,0.1)",
+                  }} />
+              ))}
+            </div>
+            <span className="text-xs font-medium" style={{ color: sc.from }}>{Math.round(((step + 1) / totalSteps) * 100)}%</span>
           </div>
         </div>
 
         {/* Card */}
         <motion.div
-          className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-2xl shadow-2xl shadow-black/60 overflow-hidden"
-          initial={{ opacity: 0, y: 30 }}
+          className="rounded-3xl overflow-hidden"
+          style={{
+            background: "linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)",
+            backdropFilter: "blur(40px)",
+            WebkitBackdropFilter: "blur(40px)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: `0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${sc.shadow}`,
+          }}
+          initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          {/* Top gradient stripe */}
-          <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-400" />
+          {/* Gradient stripe */}
+          <div className="h-[2px] w-full"
+            style={{ background: `linear-gradient(90deg, ${sc.from}, ${sc.to}, ${sc.from})` }} />
 
-          <div className="p-8 sm:p-10">
+          <div className="p-8">
             <AnimatePresence mode="wait">
-              {/* STEP 0 — Name */}
               {step === 0 && (
-                <motion.div
-                  key="step-0"
-                  variants={stepVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                >
+                <motion.div key="s0" variants={stepVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.28 }}>
                   <div className="text-center mb-8">
-                    <div className="text-5xl mb-4">👋</div>
+                    <div className="text-5xl mb-4 animate-float inline-block">👋</div>
                     <h1 className="text-2xl font-bold text-slate-50">Welcome to SmartStudy!</h1>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Let&apos;s set up your personalised experience. What should we call you?
-                    </p>
-                  </div>
-                  <div className="space-y-4">
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
-                      Your name
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Shlok"
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-slate-100 placeholder-slate-600 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20 transition-all text-sm"
-                      autoFocus
-                    />
-                    {name.trim() && (
-                      <motion.p
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-xs text-emerald-400 flex items-center gap-1.5"
-                      >
-                        <span>✓</span> Nice to meet you, {name.trim()}!
-                      </motion.p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STEP 1 — Age */}
-              {step === 1 && (
-                <motion.div
-                  key="step-1"
-                  variants={stepVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                >
-                  <div className="text-center mb-8">
-                    <div className="text-5xl mb-4">🎂</div>
-                    <h1 className="text-2xl font-bold text-slate-50">How old are you?</h1>
-                    <p className="mt-2 text-sm text-slate-400">
-                      This helps us tailor your study intensity and recommendations.
-                    </p>
+                    <p className="mt-2 text-sm text-slate-400">Let's personalise your AI study experience</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
-                      Age
-                    </label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="99"
-                      value={age}
-                      onChange={(e) => setAge(e.target.value)}
-                      placeholder="e.g. 18"
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-slate-100 placeholder-slate-600 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20 transition-all text-sm"
-                      autoFocus
-                    />
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">Your name</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Shlok"
+                      className="w-full rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-600 outline-none focus-glow transition-all text-sm"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }} autoFocus />
+                    <AnimatePresence>
+                      {name.trim() && (
+                        <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                          className="mt-2 text-xs text-emerald-400 flex items-center gap-1.5">
+                          <span>✓</span> Nice to meet you, {name.trim()}!
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </motion.div>
               )}
-
-              {/* STEP 2 — Grade / Level */}
-              {step === 2 && (
-                <motion.div
-                  key="step-2"
-                  variants={stepVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                >
+              {step === 1 && (
+                <motion.div key="s1" variants={stepVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.28 }}>
                   <div className="text-center mb-8">
-                    <div className="text-5xl mb-4">🎓</div>
-                    <h1 className="text-2xl font-bold text-slate-50">What&apos;s your level?</h1>
-                    <p className="mt-2 text-sm text-slate-400">
-                      We&apos;ll adjust AI difficulty, quiz depth, and plan intensity accordingly.
-                    </p>
+                    <div className="text-5xl mb-4 animate-float inline-block">🎂</div>
+                    <h1 className="text-2xl font-bold text-slate-50">How old are you?</h1>
+                    <p className="mt-2 text-sm text-slate-400">Helps us tailor intensity & recommendations</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">Age</label>
+                    <input type="number" min="5" max="99" value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 18"
+                      className="w-full rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-600 outline-none focus-glow transition-all text-sm"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }} autoFocus />
+                  </div>
+                </motion.div>
+              )}
+              {step === 2 && (
+                <motion.div key="s2" variants={stepVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.28 }}>
+                  <div className="text-center mb-6">
+                    <div className="text-5xl mb-4 animate-float inline-block">🎓</div>
+                    <h1 className="text-2xl font-bold text-slate-50">What's your level?</h1>
+                    <p className="mt-2 text-sm text-slate-400">We'll adjust AI difficulty accordingly</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
                     {GRADES.map((g) => (
-                      <motion.button
-                        key={g}
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => setGrade(g)}
-                        className={`rounded-xl border px-4 py-3 text-sm font-medium text-left transition-all ${
-                          grade === g
-                            ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200 shadow-lg shadow-indigo-500/10"
-                            : "border-white/8 bg-white/4 text-slate-300 hover:border-white/15 hover:bg-white/8"
-                        }`}
-                      >
+                      <motion.button key={g} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setGrade(g)}
+                        className="rounded-xl px-4 py-3 text-sm font-medium text-left transition-all"
+                        style={grade === g ? {
+                          background: `linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.12))`,
+                          border: "1px solid rgba(99,102,241,0.35)",
+                          color: "#c7d2fe",
+                          boxShadow: "0 2px 16px rgba(99,102,241,0.2)",
+                        } : {
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.07)",
+                          color: "#94a3b8",
+                        }}>
                         {g}
                       </motion.button>
                     ))}
                   </div>
                 </motion.div>
               )}
-
-              {/* STEP 3 — Goal */}
               {step === 3 && (
-                <motion.div
-                  key="step-3"
-                  variants={stepVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                >
-                  <div className="text-center mb-8">
-                    <div className="text-5xl mb-4">🚀</div>
-                    <h1 className="text-2xl font-bold text-slate-50">What&apos;s your main goal?</h1>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Your AI coach will focus everything around this.
-                    </p>
+                <motion.div key="s3" variants={stepVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.28 }}>
+                  <div className="text-center mb-6">
+                    <div className="text-5xl mb-4 animate-float inline-block">🚀</div>
+                    <h1 className="text-2xl font-bold text-slate-50">What's your main goal?</h1>
+                    <p className="mt-2 text-sm text-slate-400">Your AI coach will focus everything around this</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2.5">
                     {GOALS.map((g) => {
-                      const isSelected = goals.includes(g.label);
+                      const sel = goals.includes(g.label);
                       return (
-                        <motion.button
-                          key={g.label}
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => {
-                            if (isSelected) {
-                              setGoals(goals.filter((gl) => gl !== g.label));
-                            } else {
-                              setGoals([...goals, g.label]);
-                            }
-                          }}
-                          className={`rounded-xl border px-4 py-3 text-sm font-medium text-left transition-all ${
-                            isSelected
-                              ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200 shadow-lg shadow-emerald-500/10"
-                              : "border-white/8 bg-white/4 text-slate-300 hover:border-white/15 hover:bg-white/8"
-                          }`}
-                        >
-                          <span className="mr-2">{g.icon}</span>{g.label}
+                        <motion.button key={g.label} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                          onClick={() => sel ? setGoals(goals.filter((x) => x !== g.label)) : setGoals([...goals, g.label])}
+                          className="rounded-xl px-3 py-3 text-sm font-medium text-left transition-all"
+                          style={sel ? {
+                            background: "linear-gradient(135deg, rgba(52,211,153,0.18), rgba(16,185,129,0.10))",
+                            border: "1px solid rgba(52,211,153,0.35)",
+                            color: "#6ee7b7",
+                            boxShadow: "0 2px 16px rgba(52,211,153,0.15)",
+                          } : {
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.07)",
+                            color: "#94a3b8",
+                          }}>
+                          <span className="mr-1.5">{g.icon}</span>{g.label}
                         </motion.button>
                       );
                     })}
@@ -268,47 +215,29 @@ export default function OnboardingPage() {
             {/* Actions */}
             <div className="mt-8 flex items-center justify-between gap-4">
               {step > 0 ? (
-                <motion.button
-                  whileHover={{ x: -2 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setStep((s) => s - 1)}
-                  className="text-sm text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
-                >
+                <motion.button whileHover={{ x: -2 }} onClick={() => setStep((s) => s - 1)}
+                  className="text-sm text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1">
                   ← Back
                 </motion.button>
-              ) : (
-                <div />
-              )}
-
+              ) : <div />}
               <motion.button
                 whileHover={canNext() ? { scale: 1.03, y: -1 } : {}}
                 whileTap={canNext() ? { scale: 0.97 } : {}}
-                onClick={() => {
-                  if (!canNext()) return;
-                  if (step < totalSteps - 1) {
-                    setStep((s) => s + 1);
-                  } else {
-                    handleFinish();
-                  }
-                }}
+                onClick={() => { if (!canNext()) return; step < totalSteps - 1 ? setStep((s) => s + 1) : handleFinish(); }}
                 disabled={!canNext() || saving}
-                className={`relative overflow-hidden rounded-full px-8 py-3 text-sm font-semibold text-white transition-all ${
-                  canNext()
-                    ? "cursor-pointer"
-                    : "cursor-not-allowed opacity-40"
-                }`}
+                className="relative overflow-hidden rounded-full px-8 py-3 text-sm font-bold text-white transition-all disabled:opacity-40"
+                style={canNext() ? {
+                  background: `linear-gradient(135deg, ${sc.from}, ${sc.to})`,
+                  boxShadow: `0 4px 20px ${sc.shadow}`,
+                } : { background: "rgba(255,255,255,0.1)" }}
               >
-                <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500 animate-gradient" />
-                <span className="relative z-10">
-                  {saving ? "Setting up..." : step === totalSteps - 1 ? "Launch my dashboard 🚀" : "Continue →"}
-                </span>
+                {saving ? "Setting up..." : step === totalSteps - 1 ? "Launch Dashboard 🚀" : "Continue →"}
               </motion.button>
             </div>
           </div>
         </motion.div>
 
-        {/* Bottom note */}
-        <p className="mt-6 text-center text-xs text-slate-600">
+        <p className="mt-5 text-center text-[11px] text-slate-600">
           You can update these anytime from your profile settings
         </p>
       </div>

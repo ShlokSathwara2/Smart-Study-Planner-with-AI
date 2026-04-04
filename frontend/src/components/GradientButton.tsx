@@ -1,41 +1,36 @@
 "use client";
 
-import { ButtonHTMLAttributes } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 
-interface GradientButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface GradientButtonProps {
   label: string;
-  href?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+  variant?: "primary" | "danger" | "success";
 }
 
-export function GradientButton({ label, className = "", ...props }: GradientButtonProps) {
-  const { href, ...buttonProps } = props;
-  const inner = (
+const VARIANTS = {
+  primary: { bg: "linear-gradient(135deg, #6366f1, #8b5cf6)", shadow: "rgba(99,102,241,0.4)" },
+  danger:  { bg: "linear-gradient(135deg, #ef4444, #f87171)", shadow: "rgba(239,68,68,0.35)" },
+  success: { bg: "linear-gradient(135deg, #10b981, #34d399)", shadow: "rgba(16,185,129,0.35)" },
+};
+
+export function GradientButton({ label, onClick, disabled, className = "", variant = "primary" }: GradientButtonProps) {
+  const v = VARIANTS[variant];
+  return (
     <motion.button
-      type={buttonProps.type ?? "button"}
-      whileHover={{ y: -1, boxShadow: "0 18px 45px rgba(15,23,42,0.65)" }}
-      whileTap={{ scale: 0.97, y: 0 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
-      className={`group relative inline-flex items-center justify-center overflow-hidden rounded-full px-6 py-2 text-sm font-medium text-slate-50 ${className}`}
-      {...(buttonProps as any)}
+      whileHover={disabled ? {} : { scale: 1.03, y: -1 }}
+      whileTap={disabled ? {} : { scale: 0.97 }}
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative overflow-hidden rounded-xl px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed glass-shine ${className}`}
+      style={{
+        background: v.bg,
+        boxShadow: `0 4px 18px ${v.shadow}, inset 0 1px 0 rgba(255,255,255,0.15)`,
+      }}
     >
-      <span className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-indigo-400 to-emerald-400" />
-      <span className="absolute inset-0 opacity-0 mix-blend-screen blur-lg transition-opacity duration-300 group-hover:opacity-100" />
-      <span className="relative z-10">{label}</span>
+      {label}
     </motion.button>
   );
-
-  if (href) {
-    return (
-      <Link href={href} className="inline-flex">
-        {inner}
-      </Link>
-    );
-  }
-
-  return (
-    inner
-  );
 }
-

@@ -1,278 +1,247 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { GlassCard } from "./GlassCard";
 
-interface TopicNode {
-  _id: string;
-  topic: string;
-  dependencies?: string[];
-  difficulty?: number;
-  estimatedHours?: number;
-}
+interface TopicNode { _id: string; topic: string; dependencies?: string[]; difficulty?: number; estimatedHours?: number; }
+interface KnowledgeGraphProps { syllabusId?: string; userId?: string; }
 
-interface KnowledgeGraphProps {
-  syllabusId?: string;
-  userId?: string;
-}
+const apiBase = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000") : "http://localhost:4000";
+const DIFF_COLORS = ["#4ade80","#60a5fa","#fbbf24","#f97316","#f87171"];
+const DIFF_LABELS = ["Beginner","Easy","Medium","Hard","Expert"];
 
 export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
   const [topics, setTopics] = useState<TopicNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTopic, setSelectedTopic] = useState<TopicNode | null>(null);
+  const [selected, setSelected] = useState<TopicNode | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    if (!syllabusId || !userId) return;
-    
-    const fetchTopics = async () => {
-      try {
-        const response = await fetch(`/api/graph/by-syllabus/${syllabusId}?userId=${userId}`);
-        const data = await response.json();
-        if (data.ok && data.dependencies) {
-          setTopics(data.dependencies);
-        }
-      } catch (error) {
-        console.error("Failed to fetch topics:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTopics();
+    if (!syllabusId || !userId) { setLoading(false); return; }
+    fetch(`${apiBase}/api/graph/by-syllabus/${syllabusId}?userId=${userId}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.ok && d.dependencies) setTopics(d.dependencies); })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [syllabusId, userId]);
 
-  // Calculate node positions in a circular layout
-  const getNodePositions = () => {
-    const centerX = 400;
-    const centerY = 300;
-    const radius = 200;
-    const angleStep = (2 * Math.PI) / topics.length;
+  // Layout: center + rings
+  const getLayout = () => {
+    const W = 700, H = 480, cx = W / 2, cy = H / 2;
+    const positions: Record<string, { x: number; y: number }> = {};
+    if (topics.length === 0) return positions;
+    if (topics.length === 1) { positions[topics[0]._id] = { x: cx, y: cy }; return positions; }
 
-    return topics.map((topic, index) => {
-      const angle = index * angleStep - Math.PI / 2;
-      return {
-        ...topic,
-        x: centerX + radius * Math.cos(angle),
-        y: centerY + radius * Math.sin(angle),
-      };
+    // Group by dependency depth
+    const noPrereqs = topics.filter((t) => !t.dependencies || t.dependencies.length === 0);
+    const hasPrereqs = topics.filter((t) => t.dependencies && t.dependencies.length > 0);
+    const rings = [noPrereqs, hasPrereqs];
+
+    rings.forEach((ring, ri) => {
+      const r = ri === 0 ? 120 : 200;
+      ring.forEach((t, i) => {
+        const angle = (2 * Math.PI * i) / ring.length - Math.PI / 2;
+        positions[t._id] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+      });
     });
+    return positions;
   };
 
-  const positionedNodes = getNodePositions();
+  const positions = getLayout();
+  const deps = selected
+    ? topics.filter((t) => selected.dependencies?.includes(t._id) || t.dependencies?.includes(selected._id))
+    : [];
 
-  // Check if a topic has all dependencies met
-  const areDependenciesMet = (topic: TopicNode) => {
-    if (!topic.dependencies || topic.dependencies.length === 0) return true;
-    const completedTopics = topics.filter(t => t.difficulty === 0).map(t => t.topic);
-    return topic.dependencies.every(dep => 
-      completedTopics.some(completed => completed.toLowerCase().includes(dep.toLowerCase()))
-    );
-  };
+  if (loading) return (
+    <GlassCard className="w-full min-h-[400px] flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+          className="h-10 w-10 mx-auto rounded-full border-2 border-violet-500 border-t-transparent" />
+        <p className="text-slate-500 text-sm">Loading knowledge graph...</p>
+      </div>
+    </GlassCard>
+  );
 
-  const getNodeColor = (topic: TopicNode) => {
-    if (topic.difficulty === 0) return "#22C55E"; // Completed - green
-    if (!areDependenciesMet(topic)) return "#EF4444"; // Blocked - red
-    return "#6366F1"; // Available - indigo
-  };
+  if (!syllabusId) return (
+    <GlassCard className="min-h-[300px] flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <div className="text-5xl">🗺️</div>
+        <p className="text-slate-300 font-medium">Upload a syllabus first</p>
+        <p className="text-sm text-slate-500">The knowledge graph will appear here once your syllabus is processed</p>
+      </div>
+    </GlassCard>
+  );
 
-  if (loading) {
-    return (
-      <GlassCard className="w-full h-[600px] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin text-4xl mb-4">⏳</div>
-          <p className="text-slate-400">Loading knowledge graph...</p>
-        </div>
-      </GlassCard>
-    );
-  }
-
-  if (topics.length === 0) {
-    return (
-      <GlassCard className="w-full h-[600px] flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">🗺️</div>
-          <p className="text-slate-400">No topics mapped yet</p>
-          <p className="text-sm text-slate-500 mt-2">Upload your syllabus to generate the knowledge graph</p>
-        </div>
-      </GlassCard>
-    );
-  }
+  if (topics.length === 0) return (
+    <GlassCard className="min-h-[300px] flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <div className="text-5xl">📭</div>
+        <p className="text-slate-300 font-medium">No topics yet</p>
+        <p className="text-sm text-slate-500">Generate a study plan to populate the learning map</p>
+      </div>
+    </GlassCard>
+  );
 
   return (
-    <GlassCard className="w-full overflow-hidden">
-      <div className="p-6 border-b border-white/10">
-        <h2 className="text-2xl font-bold text-slate-50">Learning Path Map</h2>
-        <p className="text-sm text-slate-400 mt-1">
-          Visualize topic dependencies and recommended learning order
-        </p>
-      </div>
-
-      <div className="relative h-[600px] bg-gradient-to-b from-white/[0.02] to-transparent">
-        <svg width="100%" height="100%" viewBox="0 0 800 600" className="absolute inset-0">
-          {/* Draw dependency lines */}
-          {positionedNodes.map((node, index) => {
-            if (!node.dependencies || node.dependencies.length === 0) return null;
-            
-            return node.dependencies.map((depName) => {
-              const parentNode = positionedNodes.find(n => 
-                n.topic.toLowerCase().includes(depName.toLowerCase())
-              );
-              
-              if (!parentNode) return null;
-              
-              const isBlocked = !areDependenciesMet(node);
-              
-              return (
-                <line
-                  key={`${node._id}-${depName}`}
-                  x1={parentNode.x}
-                  y1={parentNode.y}
-                  x2={node.x}
-                  y2={node.y}
-                  stroke={isBlocked ? "#EF4444" : "#6366F1"}
-                  strokeWidth="2"
-                  strokeOpacity="0.4"
-                  strokeDasharray={isBlocked ? "5,5" : "none"}
-                />
-              );
-            });
-          })}
-        </svg>
-
-        {/* Draw nodes */}
-        {positionedNodes.map((node) => {
-          const isCompleted = node.difficulty === 0;
-          const isBlocked = !areDependenciesMet(node);
-          
-          return (
-            <motion.div
-              key={node._id}
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
-              className="absolute cursor-pointer"
-              style={{
-                left: node.x - 75,
-                top: node.y - 20,
-              }}
-              onClick={() => setSelectedTopic(node)}
-              whileHover={{ scale: 1.05 }}
-            >
-              <div
-                className={`
-                  px-4 py-2 rounded-lg border-2 backdrop-blur-sm
-                  ${isCompleted 
-                    ? "bg-green-500/20 border-green-500" 
-                    : isBlocked 
-                      ? "bg-red-500/20 border-red-500" 
-                      : "bg-indigo-500/20 border-indigo-500"
-                  }
-                `}
-              >
-                <p className="text-xs font-medium text-slate-100 whitespace-nowrap">
-                  {node.topic.length > 25 ? node.topic.substring(0, 25) + "..." : node.topic}
-                </p>
-                {node.estimatedHours && (
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    ~{node.estimatedHours}h
-                  </p>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
+    <div className="space-y-5">
       {/* Legend */}
-      <div className="p-4 border-t border-white/10 flex items-center justify-center gap-6 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-indigo-500" />
-          <span className="text-slate-400">Available</span>
+      <GlassCard className="p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Difficulty</p>
+          {DIFF_LABELS.map((l, i) => (
+            <div key={l} className="flex items-center gap-1.5">
+              <div className="h-3 w-3 rounded-full" style={{ background: DIFF_COLORS[i], boxShadow: `0 0 6px ${DIFF_COLORS[i]}60` }} />
+              <span className="text-xs text-slate-400">{l}</span>
+            </div>
+          ))}
+          <p className="text-xs text-slate-600 ml-auto">{topics.length} topics · click to explore</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-slate-400">Completed</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span className="text-slate-400">Blocked</span>
+      </GlassCard>
+
+      <div className="grid lg:grid-cols-3 gap-5">
+        {/* Graph SVG */}
+        <GlassCard className="lg:col-span-2 p-4 overflow-hidden">
+          <svg ref={svgRef} viewBox="0 0 700 480" className="w-full h-auto">
+            <defs>
+              {topics.map((t) => {
+                const di = Math.min(Math.max((t.difficulty ?? 1) - 1, 0), 4);
+                const c = DIFF_COLORS[di];
+                return (
+                  <radialGradient key={`g-${t._id}`} id={`ng-${t._id}`} cx="50%" cy="30%" r="70%">
+                    <stop offset="0%" stopColor={c} stopOpacity="0.5" />
+                    <stop offset="100%" stopColor={c} stopOpacity="0.15" />
+                  </radialGradient>
+                );
+              })}
+            </defs>
+
+            {/* Edges */}
+            {topics.flatMap((t) =>
+              (t.dependencies || []).map((depId) => {
+                const from = positions[t._id];
+                const to = positions[depId];
+                if (!from || !to) return null;
+                const isHighlighted = selected && (selected._id === t._id || selected._id === depId);
+                return (
+                  <motion.line key={`${t._id}-${depId}`}
+                    x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                    stroke={isHighlighted ? "rgba(165,180,252,0.6)" : "rgba(255,255,255,0.08)"}
+                    strokeWidth={isHighlighted ? 1.5 : 1}
+                    strokeDasharray={isHighlighted ? "none" : "4 4"}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}
+                  />
+                );
+              })
+            )}
+
+            {/* Nodes */}
+            {topics.map((t) => {
+              const pos = positions[t._id];
+              if (!pos) return null;
+              const di = Math.min(Math.max((t.difficulty ?? 1) - 1, 0), 4);
+              const c = DIFF_COLORS[di];
+              const isSel = selected?._id === t._id;
+              const isHov = hoveredId === t._id;
+              const r = isSel ? 28 : isHov ? 24 : 20;
+              return (
+                <g key={t._id} style={{ cursor: "pointer" }}
+                  onClick={() => setSelected(isSel ? null : t)}
+                  onMouseEnter={() => setHoveredId(t._id)}
+                  onMouseLeave={() => setHoveredId(null)}>
+                  {/* Outer ring pulse */}
+                  {(isSel || isHov) && (
+                    <motion.circle cx={pos.x} cy={pos.y} r={r + 10} fill="none" stroke={c} strokeWidth="1" opacity={0.3}
+                      animate={{ r: [r + 8, r + 16, r + 8], opacity: [0.4, 0, 0.4] }} transition={{ repeat: Infinity, duration: 2 }} />
+                  )}
+                  <motion.circle cx={pos.x} cy={pos.y} r={r}
+                    fill={`url(#ng-${t._id})`} stroke={c}
+                    strokeWidth={isSel ? 2 : 1}
+                    style={{ filter: isSel ? `drop-shadow(0 0 8px ${c})` : "none" }}
+                    animate={{ r }} transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  />
+                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle"
+                    fill="white" fontSize={isSel ? "11" : "9"} fontWeight={isSel ? "700" : "500"}>
+                    {t.topic.length > 12 ? t.topic.slice(0, 11) + "…" : t.topic}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </GlassCard>
+
+        {/* Side panel */}
+        <div className="space-y-4">
+          <AnimatePresence mode="wait">
+            {selected ? (
+              <motion.div key={selected._id} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}>
+                <GlassCard glow glowColor="purple" className="p-5">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <h3 className="font-bold text-slate-100 text-base leading-snug">{selected.topic}</h3>
+                    <button onClick={() => setSelected(null)} className="text-slate-600 hover:text-slate-300 text-lg shrink-0">✕</button>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">Difficulty</p>
+                      <p className="font-semibold text-sm" style={{ color: DIFF_COLORS[Math.min((selected.difficulty ?? 1) - 1, 4)] }}>
+                        {DIFF_LABELS[Math.min((selected.difficulty ?? 1) - 1, 4)]}
+                      </p>
+                    </div>
+                    {selected.estimatedHours && (
+                      <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">Est. Time</p>
+                        <p className="font-semibold text-sm text-indigo-300">{selected.estimatedHours}h</p>
+                      </div>
+                    )}
+                    {deps.length > 0 && (
+                      <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-2">Related Topics</p>
+                        <div className="space-y-1.5">
+                          {deps.map((d) => (
+                            <button key={d._id} onClick={() => setSelected(d)}
+                              className="w-full text-left text-xs text-indigo-300 hover:text-indigo-200 py-1 flex items-center gap-1.5 transition-colors">
+                              <span>→</span> {d.topic}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </GlassCard>
+              </motion.div>
+            ) : (
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <GlassCard className="p-5 text-center">
+                  <p className="text-3xl mb-3">👆</p>
+                  <p className="text-sm text-slate-400">Click any node to explore topic details and dependencies</p>
+                </GlassCard>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Topic list */}
+          <GlassCard className="p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-3">All Topics</p>
+            <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+              {topics.map((t) => {
+                const di = Math.min(Math.max((t.difficulty ?? 1) - 1, 0), 4);
+                return (
+                  <button key={t._id} onClick={() => setSelected(selected?._id === t._id ? null : t)}
+                    className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-left transition-all"
+                    style={selected?._id === t._id
+                      ? { background: "rgba(139,92,246,0.15)", color: "#c4b5fd" }
+                      : { color: "#94a3b8" }}>
+                    <div className="h-2 w-2 rounded-full shrink-0" style={{ background: DIFF_COLORS[di], boxShadow: `0 0 4px ${DIFF_COLORS[di]}60` }} />
+                    <span className="truncate">{t.topic}</span>
+                    {t.estimatedHours && <span className="ml-auto text-[10px] text-slate-600 shrink-0">{t.estimatedHours}h</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </GlassCard>
         </div>
       </div>
-
-      {/* Topic Details Modal */}
-      {selectedTopic && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedTopic(null)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            className="bg-[#1E293B] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-slate-50">{selectedTopic.topic}</h3>
-              <button
-                onClick={() => setSelectedTopic(null)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Status</p>
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-3 h-3 rounded-full ${
-                      selectedTopic.difficulty === 0
-                        ? "bg-green-500"
-                        : !areDependenciesMet(selectedTopic)
-                          ? "bg-red-500"
-                          : "bg-indigo-500"
-                    }`}
-                  />
-                  <span className="text-sm text-slate-200">
-                    {selectedTopic.difficulty === 0
-                      ? "Completed"
-                      : !areDependenciesMet(selectedTopic)
-                        ? "Blocked by prerequisites"
-                        : "Ready to learn"}
-                  </span>
-                </div>
-              </div>
-              
-              {selectedTopic.estimatedHours && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1">Estimated Time</p>
-                  <p className="text-sm text-slate-200">~{selectedTopic.estimatedHours} hours</p>
-                </div>
-              )}
-              
-              {selectedTopic.dependencies && selectedTopic.dependencies.length > 0 && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1">Requires</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedTopic.dependencies.map((dep, idx) => (
-                      <span
-                        key={idx}
-                        className="text-xs px-2 py-1 bg-white/10 rounded text-slate-300"
-                      >
-                        {dep}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </GlassCard>
+    </div>
   );
 }

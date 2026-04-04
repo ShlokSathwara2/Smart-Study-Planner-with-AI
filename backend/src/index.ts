@@ -17,6 +17,7 @@ import examPredictRouter from './routes/examPredict';
 import studyInsightsRouter from './routes/studyInsights';
 import voiceInputRouter from './routes/voiceInput';
 import studyStrategyRouter from './routes/studyStrategy';
+import userResetRouter from './routes/userReset';
 import { initializeVectorCollection } from './utils/vectorService';
 import { scheduleWeeklyDigitalTwinJob } from './utils/weeklyScheduler';
 
@@ -47,6 +48,7 @@ app.use('/api/exam-predict', examPredictRouter);
 app.use('/api/study-insights', studyInsightsRouter);
 app.use('/api/voice-input', voiceInputRouter);
 app.use('/api/study-strategy', studyStrategyRouter);
+app.use('/api/user', userResetRouter);
 
 // Initialize vector database (Qdrant)
 async function initializeServer() {
