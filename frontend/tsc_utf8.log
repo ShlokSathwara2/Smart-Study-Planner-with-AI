@@ -1,0 +1,4 @@
+src/components/SidebarLayout.tsx(132,25): error TS2322: Type '{ afterSignOutUrl: string; }' is not assignable to type 'IntrinsicAttributes & Without<WithClerkProp<PropsWithChildren<UserButtonPropsWithoutCustomPages> & FallbackProp>, "clerk">'.
+  Property 'afterSignOutUrl' does not exist on type 'IntrinsicAttributes & Without<WithClerkProp<PropsWithChildren<UserButtonPropsWithoutCustomPages> & FallbackProp>, "clerk">'.
+src/components/SidebarLayout.tsx(171,27): error TS2322: Type '{ afterSignOutUrl: string; }' is not assignable to type 'IntrinsicAttributes & Without<WithClerkProp<PropsWithChildren<UserButtonPropsWithoutCustomPages> & FallbackProp>, "clerk">'.
+  Property 'afterSignOutUrl' does not exist on type 'IntrinsicAttributes & Without<WithClerkProp<PropsWithChildren<UserButtonPropsWithoutCustomPages> & FallbackProp>, "clerk">'.

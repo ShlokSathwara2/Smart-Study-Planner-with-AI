@@ -28,6 +28,7 @@ interface CalendarViewProps {
 }
 
 export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewProps) {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const [plan, setPlan] = useState<StudyPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentWeek, setCurrentWeek] = useState(0);
@@ -47,7 +48,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
     const fetchPlanAndData = async () => {
       try {
         // Fix B3: Corrected URL from /api/study-plan to /api/plan
-        const response = await fetch(`${apiBase}/api/plan/latest?userId=${userId}${syllabusId ? `&syllabusId=${syllabusId}` : ''}`);
+        const response = await fetch(`/api/plan/latest?userId=${userId}${syllabusId ? `&syllabusId=${syllabusId}` : ''}`);
         const data = await response.json();
         if (data.ok && data.plan) {
           setPlan(data.plan);
@@ -55,7 +56,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
           const pId = data.plan._id;
           
           // Phase 6 (I4): Fetch progress
-          const progRes = await fetch(`${apiBase}/api/plan/${pId}/progress?userId=${userId}`);
+          const progRes = await fetch(`/api/plan/${pId}/progress?userId=${userId}`);
           const progData = await progRes.json();
           if (progData.ok && progData.behindDays > 0) {
             setBehindDays(progData.behindDays);
