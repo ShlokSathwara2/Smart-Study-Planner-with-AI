@@ -54,6 +54,7 @@ interface DigitalTwinProfileProps {
 }
 
 export function DigitalTwinProfile({ userId, syllabusId }: DigitalTwinProfileProps) {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const [digitalTwin, setDigitalTwin] = useState<DigitalTwin | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
