@@ -43,7 +43,7 @@ export function StrategyChat({ userId, syllabusId, onStrategyGenerated }: Strate
     
     setLoading(true);
     try {
-      const res = await fetch('/api/study-strategy/generate', {
+      const res = await fetch(`${apiBase}/api/study-strategy/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -55,6 +55,12 @@ export function StrategyChat({ userId, syllabusId, onStrategyGenerated }: Strate
         }),
       });
 
+      // Check if response is HTML (error page)
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned HTML instead of JSON. Backend may not be running.');
+      }
+
       const data = await res.json();
       if (data.ok && data.strategy) {
         setStrategy(data.strategy);
@@ -62,9 +68,9 @@ export function StrategyChat({ userId, syllabusId, onStrategyGenerated }: Strate
       } else {
         alert(data.error || 'Failed to generate strategy');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to generate strategy:', err);
-      alert('Failed to generate strategy. Please try again.');
+      alert(err.message || 'Failed to generate strategy. Please ensure backend is running.');
     } finally {
       setLoading(false);
     }
@@ -74,7 +80,7 @@ export function StrategyChat({ userId, syllabusId, onStrategyGenerated }: Strate
     if (!strategy) return;
     
     try {
-      const res = await fetch('/api/study-strategy/approve', {
+      const res = await fetch(`${apiBase}/api/study-strategy/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
