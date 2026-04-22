@@ -6,6 +6,7 @@ import { createWorker } from 'tesseract.js';
 import * as mammoth from 'mammoth';
 import { SyllabusModel } from '../models/Syllabus';
 import { batchEmbedTopics } from '../utils/vectorService';
+import { askAIForJSON } from '../utils/aiClient';
 
 const router = Router();
 
@@ -42,19 +43,7 @@ async function extractDocx(buffer: Buffer): Promise<string> {
   return (result.value || '').trim();
 }
 
-async function analyzeWithClaude(rawText: string, grade: string, rawBookText?: string) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    // Fallback: simple heuristic without external API
-    return {
-      topics: [],
-      chapters: [],
-      units: [],
-      difficulty: 'medium',
-      estimatedHours: 0,
-    };
-  }
-
+async function analyzeWithGemini(rawText: string, grade: string, rawBookText?: string) {
   const systemPrompt = `You analyze academic syllabi and return a concise JSON structure.
 The user is in grade/level: ${grade}. Please adapt the estimatedHours and difficulty based on their level.
 Always extract 'chapters' containing the chapter title and 'pages' (number of pages).
@@ -73,37 +62,10 @@ Respond with JSON only matching this schema:
     userContent += `\n\nAdditionally, here is an excerpt from the reference book:\n${rawBookText.slice(0, 30000)}`;
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
-      temperature: 0,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: userContent }],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errorBody}`);
-  }
-
-  const data = await response.json();
-  const content = data?.content?.[0]?.text ?? '';
+  const fullPrompt = `${systemPrompt}\n\n${userContent}`;
 
   try {
-    return JSON.parse(content);
+    return await askAIForJSON(fullPrompt);
   } catch {
     return {
       topics: [],
@@ -188,7 +150,7 @@ router.post(
         }
       }
 
-      const analysis = await analyzeWithClaude(rawText, grade, rawBookText);
+      const analysis = await analyzeWithGemini(rawText, grade, rawBookText);
 
       const syllabus = await SyllabusModel.create({
         userId,

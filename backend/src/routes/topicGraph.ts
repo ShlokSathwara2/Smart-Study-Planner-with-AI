@@ -1,60 +1,27 @@
 import { Router } from 'express';
 import { SyllabusModel } from '../models/Syllabus';
 import { TopicDependencyModel } from '../models/TopicDependency';
+import { askAIForJSON } from '../utils/aiClient';
 
 const router = Router();
 
-async function analyzeDependenciesWithClaude(topics: string[]) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || topics.length === 0) {
+async function analyzeDependenciesWithGemini(topics: string[]) {
+  if (topics.length === 0) {
     return [];
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 800,
-      temperature: 0,
-      system:
-        'You are mapping prerequisite relationships between topics in a course. Return ONLY JSON: an array of objects like { "topic": string, "dependsOn": string[] } where dependsOn items come from the same topic list.',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Given this list of topics, infer a reasonable prerequisite graph.\n\nTopics:\n${topics
-                .map((t, i) => `${i + 1}. ${t}`)
-                .join('\n')}`,
-            },
-          ],
-        },
-      ],
-    }),
-  });
+  const prompt = `You are mapping prerequisite relationships between topics in a course. Return ONLY JSON: an array of objects like { "topic": string, "dependsOn": string[] } where dependsOn items come from the same topic list.
 
-  if (!response.ok) {
-    console.warn(`Claude dependency API error: ${response.status}. Using fallback linear graph.`);
-    return topics.map((t, i) => ({ topic: t, dependsOn: i > 0 ? [topics[i - 1]] : [] }));
-  }
+Given this list of topics, infer a reasonable prerequisite graph.
 
-  const data = await response.json();
-  const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
+Topics:
+${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
 
   try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
+    return await askAIForJSON(prompt);
   } catch {
-    return [];
+    console.warn('Gemini dependency API error. Using fallback linear graph.');
+    return topics.map((t, i) => ({ topic: t, dependsOn: i > 0 ? [topics[i - 1]] : [] }));
   }
 }
 
@@ -78,7 +45,7 @@ router.post(
         return;
       }
 
-      const deps = await analyzeDependenciesWithClaude(topics);
+      const deps = await analyzeDependenciesWithGemini(topics);
 
       // delete old graph for this syllabus
       await TopicDependencyModel.deleteMany({ userId, syllabusId });
