@@ -3,6 +3,14 @@ import { TopicDependencyModel } from '../models/TopicDependency';
 import { StudyPlanModel } from '../models/StudyPlan';
 import { DigitalTwinModel } from '../models/DigitalTwin';
 import { getDigitalTwinContext, formatDigitalTwinPrompt } from '../utils/digitalTwinContext';
+import { 
+  getGoogleAuthUrl, 
+  getAccessToken, 
+  getCalendarEvents, 
+  checkClash, 
+  createCalendarEvents,
+  findAvailableSlots 
+} from '../utils/googleCalendar';
 
 const router = Router();
 
@@ -439,6 +447,240 @@ router.post('/:planId/reschedule', async (req, res): Promise<void> => {
   } catch (err) {
     console.error('Reschedule error', err);
     res.status(500).json({ error: 'Failed to reschedule plan' });
+  }
+});
+
+// ========================================
+// Phase 5 — Google Calendar Integration
+// ========================================
+
+// GET /api/plan/calendar/auth-url?userId=...
+// Generate Google OAuth2 authorization URL
+router.get('/calendar/auth-url', async (req, res): Promise<void> => {
+  try {
+    const userId = (req.query.userId as string) || 'anonymous';
+    
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      res.status(500).json({ error: 'Google Calendar not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env' });
+      return;
+    }
+
+    const authUrl = getGoogleAuthUrl(userId);
+    res.json({ ok: true, authUrl });
+  } catch (err) {
+    console.error('Google auth URL error:', err);
+    res.status(500).json({ error: 'Failed to generate Google auth URL' });
+  }
+});
+
+// POST /api/plan/calendar/callback
+// Exchange OAuth code for tokens
+router.post('/calendar/callback', async (req, res): Promise<void> => {
+  try {
+    const { code, userId = 'anonymous' } = req.body as any;
+
+    if (!code) {
+      res.status(400).json({ error: 'Authorization code required' });
+      return;
+    }
+
+    const tokens = await getAccessToken(code);
+    
+    // Store tokens in user's latest plan (or create a settings record)
+    const plan = await StudyPlanModel.findOne({ userId }).sort({ createdAt: -1 });
+    if (plan) {
+      (plan as any).googleCalendarAccessToken = tokens.access_token;
+      (plan as any).googleCalendarRefreshToken = tokens.refresh_token || (plan as any).googleCalendarRefreshToken;
+      await plan.save();
+    }
+
+    res.json({ ok: true, message: 'Google Calendar connected successfully' });
+  } catch (err) {
+    console.error('Google callback error:', err);
+    res.status(500).json({ error: 'Failed to authenticate with Google Calendar' });
+  }
+});
+
+// POST /api/plan/:planId/calendar/sync
+// Sync study plan sessions to Google Calendar
+router.post('/:planId/calendar/sync', async (req, res): Promise<void> => {
+  try {
+    const { planId } = req.params;
+    const { userId = 'anonymous' } = req.body as any;
+
+    const plan = await StudyPlanModel.findOne({ _id: planId, userId });
+    if (!plan) {
+      res.status(404).json({ error: 'Plan not found' });
+      return;
+    }
+
+    const accessToken = (plan as any).googleCalendarAccessToken;
+    if (!accessToken) {
+      res.status(400).json({ error: 'Google Calendar not connected. Authenticate first.' });
+      return;
+    }
+
+    const sessions = Array.isArray((plan as any).sessions) ? (plan as any).sessions : [];
+    const plannedSessions = sessions.filter((s: any) => s?.date && s?.startTime && s?.endTime && s?.topic);
+
+    // Phase 5: Check for clashes with existing Google Calendar events
+    if (plannedSessions.length > 0) {
+      const firstDate = plannedSessions[0].date;
+      const lastDate = plannedSessions[plannedSessions.length - 1].date;
+
+      try {
+        const existingEvents = await getCalendarEvents(accessToken, firstDate, lastDate);
+        
+        const clashes: Array<{ session: any; clashingEvents: any[] }> = [];
+        
+        for (const session of plannedSessions) {
+          const clash = checkClash(
+            { date: session.date, startTime: session.startTime, endTime: session.endTime },
+            existingEvents
+          );
+          
+          if (clash.hasClash) {
+            clashes.push({ session, clashingEvents: clash.clashingEvents });
+          }
+        }
+
+        // If clashes found, suggest alternative time slots
+        if (clashes.length > 0) {
+          const suggestions = clashes.map((clash) => {
+            const availableSlots = findAvailableSlots(
+              clash.session.date,
+              existingEvents,
+              Math.ceil(clash.session.estimatedMinutes / 60)
+            );
+            return {
+              topic: clash.session.topic,
+              originalTime: `${clash.session.startTime} - ${clash.session.endTime}`,
+              clashingWith: clash.clashingEvents.map((e) => e.summary),
+              suggestedSlots: availableSlots.slice(0, 2), // Suggest top 2 alternatives
+            };
+          });
+
+          res.json({
+            ok: true,
+            hasClashes: true,
+            clashCount: clashes.length,
+            clashes,
+            suggestions,
+            message: `${clashes.length} session(s) clash with existing calendar events`,
+          });
+          return;
+        }
+      } catch (calendarErr) {
+        console.warn('Could not fetch calendar events for clash detection:', calendarErr);
+        // Continue with sync even if clash detection fails
+      }
+    }
+
+    // Create Google Calendar events for all planned sessions
+    const results = await createCalendarEvents(
+      accessToken,
+      plannedSessions.map((s: any) => ({
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        topic: s.topic,
+      }))
+    );
+
+    const eventIds = results
+      .filter((r) => r.success && r.eventId)
+      .map((r) => r.eventId!);
+
+    (plan as any).googleCalendarEventIds = eventIds;
+    (plan as any).calendarSynced = true;
+    await plan.save();
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
+
+    res.json({
+      ok: true,
+      message: `Synced ${successCount} sessions to Google Calendar${failCount > 0 ? ` (${failCount} failed)` : ''}`,
+      results,
+      eventIds,
+    });
+  } catch (err) {
+    console.error('Calendar sync error:', err);
+    res.status(500).json({ error: 'Failed to sync with Google Calendar' });
+  }
+});
+
+// GET /api/plan/:planId/calendar/clashes
+// Check for scheduling clashes without syncing
+router.get('/:planId/calendar/clashes', async (req, res): Promise<void> => {
+  try {
+    const { planId } = req.params;
+    const userId = (req.query.userId as string) || 'anonymous';
+
+    const plan = await StudyPlanModel.findOne({ _id: planId, userId });
+    if (!plan) {
+      res.status(404).json({ error: 'Plan not found' });
+      return;
+    }
+
+    const accessToken = (plan as any).googleCalendarAccessToken;
+    if (!accessToken) {
+      res.status(400).json({ error: 'Google Calendar not connected' });
+      return;
+    }
+
+    const sessions = Array.isArray((plan as any).sessions) ? (plan as any).sessions : [];
+    
+    if (sessions.length === 0) {
+      res.json({ ok: true, hasClashes: false, clashes: [] });
+      return;
+    }
+
+    const firstDate = sessions[0].date;
+    const lastDate = sessions[sessions.length - 1].date;
+
+    const existingEvents = await getCalendarEvents(accessToken, firstDate, lastDate);
+    
+    const clashes: Array<{ session: any; clashingEvents: any[] }> = [];
+    
+    for (const session of sessions) {
+      if (!session?.date || !session?.startTime || !session?.endTime) continue;
+      
+      const clash = checkClash(
+        { date: session.date, startTime: session.startTime, endTime: session.endTime },
+        existingEvents
+      );
+      
+      if (clash.hasClash) {
+        clashes.push({ session, clashingEvents: clash.clashingEvents });
+      }
+    }
+
+    // Generate suggestions for clashing sessions
+    const suggestions = clashes.map((clash) => {
+      const availableSlots = findAvailableSlots(
+        clash.session.date,
+        existingEvents,
+        Math.ceil((clash.session.estimatedMinutes || 60) / 60)
+      );
+      return {
+        topic: clash.session.topic,
+        originalTime: `${clash.session.startTime} - ${clash.session.endTime}`,
+        clashingWith: clash.clashingEvents.map((e) => e.summary),
+        suggestedSlots: availableSlots.slice(0, 3),
+      };
+    });
+
+    res.json({
+      ok: true,
+      hasClashes: clashes.length > 0,
+      clashCount: clashes.length,
+      clashes,
+      suggestions,
+    });
+  } catch (err) {
+    console.error('Calendar clash check error:', err);
+    res.status(500).json({ error: 'Failed to check calendar clashes' });
   }
 });
 

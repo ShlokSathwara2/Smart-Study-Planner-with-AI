@@ -27,6 +27,11 @@ export interface StudyPlanDocument extends Document {
   examDate: string; // YYYY-MM-DD
   dailyHours: number;
   sessions: StudySession[];
+  // Phase 5 — Google Calendar integration
+  googleCalendarAccessToken?: string;
+  googleCalendarRefreshToken?: string;
+  googleCalendarEventIds?: string[];
+  calendarSynced?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +67,11 @@ const StudyPlanSchema = new Schema<StudyPlanDocument>(
     examDate: { type: String, required: true },
     dailyHours: { type: Number, required: true },
     sessions: { type: [StudySessionSchema], default: [] },
+    // Phase 5 — Google Calendar integration
+    googleCalendarAccessToken: { type: String },
+    googleCalendarRefreshToken: { type: String },
+    googleCalendarEventIds: { type: [String], default: [] },
+    calendarSynced: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

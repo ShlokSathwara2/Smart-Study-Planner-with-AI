@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { GlassCard } from "./GlassCard";
 import { GradientButton } from "./GradientButton";
+import { GoogleCalendarSync } from "./GoogleCalendarSync";
 
 interface Session {
   date: string;
@@ -36,6 +37,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
   
   const [detectingGaps, setDetectingGaps] = useState(false);
   const [knowledgeGaps, setKnowledgeGaps] = useState<string[] | null>(null);
+  const [showCalendarSync, setShowCalendarSync] = useState(false);
 
   // New state added for I2, I4, I5
   const [behindDays, setBehindDays] = useState(0);
@@ -262,6 +264,12 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
             )}
             <div className="flex items-center gap-3">
               <button
+                onClick={() => setShowCalendarSync(!showCalendarSync)}
+                className="px-3 py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 text-green-300 transition-colors text-sm"
+              >
+                📅 Google Calendar
+              </button>
+              <button
                 onClick={() => setCurrentWeek(Math.max(0, currentWeek - 1))}
                 disabled={currentWeek === 0}
                 className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -282,6 +290,13 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
           </div>
         </div>
       </div>
+
+      {/* Google Calendar Sync Section */}
+      {showCalendarSync && planId && (
+        <div className="px-6 py-4 border-b border-white/10">
+          <GoogleCalendarSync planId={planId} userId={userId} />
+        </div>
+      )}
 
       <div className="p-6">
         {/* Week Overview */}
