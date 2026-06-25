@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { TopicDependencyModel } from '../models/TopicDependency';
 import { TopicEstimateModel } from '../models/TopicEstimate';
 import { StudyPlanModel } from '../models/StudyPlan';
+import { callLLM } from '../utils/aiProvider';
 
 const router = Router();
 
@@ -41,72 +42,30 @@ async function computeUserPace(userId: string): Promise<{
   };
 }
 
-async function estimateWithClaude(input: {
+async function estimateWithAI(input: {
   topics: string[];
   paceMinutesPerHour: number | null;
   observedSessions: number;
 }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    // fallback: rough default estimates
-    return input.topics.map((t) => ({
-      topic: t,
-      estimatedHours: 2,
-      confidence: 35,
-    }));
-  }
-
   const paceLine =
     input.paceMinutesPerHour == null
       ? 'No historical pace yet.'
       : `Historical pace: ~${Math.round(input.paceMinutesPerHour)} focused minutes per hour block (based on ${input.observedSessions} logged sessions).`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1200,
-      temperature: 0,
-      system:
-        'Return JSON only: an array of { "topic": string, "estimatedHours": number, "confidence": number }. Confidence is 0-100. estimatedHours is realistic study time needed for a typical student, adjusted by provided historical pace.',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Estimate required study time for each topic.\n\n${paceLine}\n\nTopics:\n${input.topics
-                .map((t, i) => `${i + 1}. ${t}`)
-                .join('\n')}`,
-            },
-          ],
-        },
-      ],
-    }),
-  });
+  const system = 'Return JSON only: an array of { "topic": string, "estimatedHours": number, "confidence": number }. Confidence is 0-100. estimatedHours is realistic study time needed for a typical student, adjusted by provided historical pace.';
+  const prompt = `Estimate required study time for each topic.\n\n${paceLine}\n\nTopics:\n${input.topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
 
-  if (!response.ok) {
-    console.warn(`Claude estimate API error: ${response.status}. Using default estimates.`);
+  try {
+    const content = await callLLM(system, prompt, { maxTokens: 1200, temperature: 0, jsonMode: true });
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    console.warn('AI estimate error, using default estimates');
     return input.topics.map((t) => ({
       topic: t,
       estimatedHours: 2,
       confidence: 30,
     }));
-  }
-
-  const data = await response.json();
-  const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
-
-  try {
-    const parsed = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
   }
 }
 
@@ -131,7 +90,7 @@ router.post('/refresh', async (req, res): Promise<void> => {
     }
 
     const pace = await computeUserPace(userId);
-    const estimates = await estimateWithClaude({
+    const estimates = await estimateWithAI({
       topics,
       paceMinutesPerHour: pace.paceMinutesPerHour,
       observedSessions: pace.observedSessions,

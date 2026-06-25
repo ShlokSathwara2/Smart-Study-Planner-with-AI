@@ -66,6 +66,9 @@ async function initializeServer() {
     app.get('/health', (_req, res) => {
       res.json({ ok: true, message: 'Smart Study Planner API is running 🚀' });
     });
+    app.get('/api/health', (_req, res) => {
+      res.json({ ok: true, message: 'Smart Study Planner API is running 🚀' });
+    });
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);

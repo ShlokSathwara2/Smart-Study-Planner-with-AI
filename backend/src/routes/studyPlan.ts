@@ -11,6 +11,7 @@ import {
   createCalendarEvents,
   findAvailableSlots 
 } from '../utils/googleCalendar';
+import { callLLM } from '../utils/aiProvider';
 
 const router = Router();
 
@@ -38,29 +39,13 @@ function sessionsOverlap(
   return aStart < bEnd && bStart < aEnd;
 }
 
-async function generatePlanWithClaude(input: {
+async function generatePlanWithAI(input: {
   topics: { topic: string; dependsOn: string[] }[];
   examDate: string;
   dailyHours: number;
   userId?: string;
   syllabusId?: string;
 }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    // fallback: simple single-day plan
-    return {
-      sessions: [
-        {
-          date: input.examDate,
-          startTime: '18:00',
-          endTime: '19:00',
-          topic: input.topics[0]?.topic || 'Getting started',
-          estimatedMinutes: 60,
-        },
-      ],
-    };
-  }
-
   // Get digital twin context if available
   let digitalTwinPrompt = '';
   if (input.userId && input.syllabusId) {
@@ -70,123 +55,49 @@ async function generatePlanWithClaude(input: {
     }
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1200,
-      temperature: 0,
-      system:
-        'You are an expert study planner. Return JSON only with shape: { "sessions": Array<{ "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "topic": string, "unit"?: string, "estimatedMinutes": number }> }. Ensure sessions do not overlap within the same day, and total per day <= dailyHours.' + digitalTwinPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Create a day-by-day study schedule.\n\nInputs:\n- examDate: ${input.examDate}\n- dailyHours: ${input.dailyHours}\n- topics with prerequisites:\n${input.topics
-                .map((t) => `- ${t.topic} (requires: ${t.dependsOn.join(', ') || 'none'})`)
-                .join('\n')}`,
-            },
-          ],
-        },
-      ],
-    }),
-  });
+  const system = 'You are an expert study planner. Return JSON only with shape: { "sessions": Array<{ "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "topic": string, "unit"?: string, "estimatedMinutes": number }> }. Ensure sessions do not overlap within the same day, and total per day <= dailyHours.' + digitalTwinPrompt;
+  const prompt = `Create a day-by-day study schedule.\n\nInputs:\n- examDate: ${input.examDate}\n- dailyHours: ${input.dailyHours}\n- topics with prerequisites:\n${input.topics.map((t) => `- ${t.topic} (requires: ${t.dependsOn.join(', ') || 'none'})`).join('\n')}`;
 
-  if (!response.ok) {
-    console.warn(`Claude plan API error: ${response.status}. Using fallback mock plan.`);
+  try {
+    const content = await callLLM(system, prompt, { maxTokens: 1200, temperature: 0, jsonMode: true });
+    return JSON.parse(content);
+  } catch {
+    console.warn('AI plan error. Using fallback mock plan.');
     let hour = 18;
     const d = new Date(input.examDate);
     return {
       sessions: input.topics.map((t, idx) => {
         const sessionDate = new Date(d);
-        sessionDate.setDate(d.getDate() - (input.topics.length - idx)); // spread backward from exam date
+        sessionDate.setDate(d.getDate() - (input.topics.length - idx));
         const yyyy = sessionDate.getFullYear();
         const mm = String(sessionDate.getMonth() + 1).padStart(2, '0');
         const dd = String(sessionDate.getDate()).padStart(2, '0');
-        const session = {
+        return {
           date: `${yyyy}-${mm}-${dd}`,
           startTime: `${String(hour).padStart(2, '0')}:00`,
           endTime: `${String(hour + 1).padStart(2, '0')}:00`,
           topic: t.topic,
           estimatedMinutes: 60,
         };
-        hour = (hour + 1) > 22 ? 18 : hour + 1;
-        return session;
       })
     };
   }
-
-  const data = await response.json();
-  const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
-
-  try {
-    return JSON.parse(content);
-  } catch {
-    return { sessions: [] };
-  }
 }
 
-async function rescheduleWithClaude(input: {
+async function rescheduleWithAI(input: {
   examDate: string;
   dailyHours: number;
   fromDate: string;
   remainingSessions: any[];
 }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    // fallback: keep same sessions
-    return { sessions: input.remainingSessions };
-  }
+  const system = 'You are rescheduling a study plan. Return JSON only: { "sessions": Array<{ "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "topic": string, "unit"?: string, "estimatedMinutes": number }> }. Constraints: dates must be between fromDate and examDate inclusive, no overlaps per day, total per day <= dailyHours.';
+  const prompt = `Reschedule remaining sessions into a recovery plan.\n\nfromDate: ${input.fromDate}\nexamDate: ${input.examDate}\ndailyHours: ${input.dailyHours}\n\nRemaining sessions (keep topics, you may adjust time slots):\n${input.remainingSessions.map((s) => `- ${s.topic} (${s.estimatedMinutes}m) originally ${s.date} ${s.startTime}-${s.endTime}`).join('\n')}`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1400,
-      temperature: 0,
-      system:
-        'You are rescheduling a study plan. Return JSON only: { "sessions": Array<{ "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "topic": string, "unit"?: string, "estimatedMinutes": number }> }. Constraints: dates must be between fromDate and examDate inclusive, no overlaps per day, total per day <= dailyHours.',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Reschedule remaining sessions into a recovery plan.\n\nfromDate: ${input.fromDate}\nexamDate: ${input.examDate}\ndailyHours: ${input.dailyHours}\n\nRemaining sessions (keep topics, you may adjust time slots):\n${input.remainingSessions
-                .map(
-                  (s) =>
-                    `- ${s.topic} (${s.estimatedMinutes}m) originally ${s.date} ${s.startTime}-${s.endTime}`,
-                )
-                .join('\n')}`,
-            },
-          ],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    console.warn(`Claude reschedule API error: ${response.status}. Keeping existing remaining sessions.`);
-    return { sessions: input.remainingSessions };
-  }
-
-  const data = await response.json();
-  const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
   try {
+    const content = await callLLM(system, prompt, { maxTokens: 1400, temperature: 0, jsonMode: true });
     return JSON.parse(content);
   } catch {
+    console.warn('AI reschedule error. Keeping existing remaining sessions.');
     return { sessions: input.remainingSessions };
   }
 }
@@ -220,7 +131,7 @@ router.post('/generate', async (req, res): Promise<void> => {
       return;
     }
 
-    const planJson = await generatePlanWithClaude({ 
+    const planJson = await generatePlanWithAI({ 
       topics, 
       examDate, 
       dailyHours: Number(dailyHours),
@@ -414,7 +325,7 @@ router.post('/:planId/reschedule', async (req, res): Promise<void> => {
       return status !== 'done' && status !== 'skipped';
     });
 
-    const rescheduled = await rescheduleWithClaude({
+    const rescheduled = await rescheduleWithAI({
       examDate: (plan as any).examDate,
       dailyHours: Number((plan as any).dailyHours),
       fromDate: startFrom,

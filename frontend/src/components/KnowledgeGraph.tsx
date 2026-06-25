@@ -10,19 +10,28 @@ interface KnowledgeGraphProps { syllabusId?: string; userId?: string; }
 const apiBase = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000") : "http://localhost:4000";
 const DIFF_COLORS = ["#4ade80","#60a5fa","#fbbf24","#f97316","#f87171"];
 const DIFF_LABELS = ["Beginner","Easy","Medium","Hard","Expert"];
+const WEAK_GLOW = "#ef4444";
 
 export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
   const [topics, setTopics] = useState<TopicNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<TopicNode | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [weakTopicNames, setWeakTopicNames] = useState<string[]>([]);
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     if (!syllabusId || !userId) { setLoading(false); return; }
-    fetch(`${apiBase}/api/graph/by-syllabus/${syllabusId}?userId=${userId}`)
-      .then((r) => r.json())
-      .then((d) => { if (d.ok && d.dependencies) setTopics(d.dependencies); })
+    Promise.all([
+      fetch(`${apiBase}/api/graph/by-syllabus/${syllabusId}?userId=${userId}`).then(r => r.json()),
+      fetch(`${apiBase}/api/weak-topics/by-syllabus/${syllabusId}?userId=${userId}`).then(r => r.json()),
+    ])
+      .then(([graphData, weakData]) => {
+        if (graphData.ok && graphData.dependencies) setTopics(graphData.dependencies);
+        if (weakData.ok && weakData.weakTopics) {
+          setWeakTopicNames(weakData.weakTopics.map((w: any) => w.topic.toLowerCase()));
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [syllabusId, userId]);
@@ -96,6 +105,12 @@ export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
               <span className="text-xs text-slate-400">{l}</span>
             </div>
           ))}
+          {weakTopicNames.length > 0 && (
+            <div className="flex items-center gap-1.5 ml-2 pl-3 border-l border-white/10">
+              <div className="h-3 w-3 rounded-full" style={{ background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.6)" }} />
+              <span className="text-xs text-red-400">{weakTopicNames.length} weak</span>
+            </div>
+          )}
           <p className="text-xs text-slate-600 ml-auto">{topics.length} topics · click to explore</p>
         </div>
       </GlassCard>
@@ -116,6 +131,11 @@ export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
                 );
               })}
             </defs>
+
+            {/* Weak Topic indicator ring */}
+            {weakTopicNames.length > 0 && (
+              <circle cx={350} cy={240} r={220} fill="none" stroke="rgba(239,68,68,0.06)" strokeWidth="20" strokeDasharray="6 4" />
+            )}
 
             {/* Edges */}
             {topics.flatMap((t) =>
@@ -144,6 +164,7 @@ export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
               const c = DIFF_COLORS[di];
               const isSel = selected?._id === t._id;
               const isHov = hoveredId === t._id;
+              const isWeak = weakTopicNames.includes(t.topic.toLowerCase());
               const r = isSel ? 28 : isHov ? 24 : 20;
               return (
                 <g key={t._id} style={{ cursor: "pointer" }}
@@ -155,10 +176,19 @@ export function KnowledgeGraph({ syllabusId, userId }: KnowledgeGraphProps) {
                     <motion.circle cx={pos.x} cy={pos.y} r={r + 10} fill="none" stroke={c} strokeWidth="1" opacity={0.3}
                       animate={{ r: [r + 8, r + 16, r + 8], opacity: [0.4, 0, 0.4] }} transition={{ repeat: Infinity, duration: 2 }} />
                   )}
+                  {/* Weak topic red glow */}
+                  {isWeak && (
+                    <motion.circle cx={pos.x} cy={pos.y} r={r + 6} fill="none" stroke={WEAK_GLOW} strokeWidth="2" opacity={0.5}
+                      animate={{ r: [r + 5, r + 10, r + 5], opacity: [0.5, 0.2, 0.5] }} transition={{ repeat: Infinity, duration: 2.5 }} />
+                  )}
+                  {isWeak && (
+                    <motion.circle cx={pos.x} cy={pos.y} r={r + 12} fill="none" stroke={WEAK_GLOW} strokeWidth="1" opacity={0.15}
+                      animate={{ r: [r + 10, r + 18, r + 10], opacity: [0.2, 0.05, 0.2] }} transition={{ repeat: Infinity, duration: 3 }} />
+                  )}
                   <motion.circle cx={pos.x} cy={pos.y} r={r}
-                    fill={`url(#ng-${t._id})`} stroke={c}
-                    strokeWidth={isSel ? 2 : 1}
-                    style={{ filter: isSel ? `drop-shadow(0 0 8px ${c})` : "none" }}
+                    fill={`url(#ng-${t._id})`} stroke={isWeak ? WEAK_GLOW : c}
+                    strokeWidth={isSel ? 2 : isWeak ? 2 : 1}
+                    style={{ filter: isWeak ? `drop-shadow(0 0 12px ${WEAK_GLOW})` : isSel ? `drop-shadow(0 0 8px ${c})` : "none" }}
                     animate={{ r }} transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   />
                   <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle"

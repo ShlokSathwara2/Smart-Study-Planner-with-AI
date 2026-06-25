@@ -4,6 +4,7 @@ import { WeakTopicModel } from '../models/WeakTopic';
 import { TopicEstimateModel } from '../models/TopicEstimate';
 import { StudyPlanModel } from '../models/StudyPlan';
 import { calculateNextReview } from '../utils/sm2';
+import { callLLM } from '../utils/aiProvider';
 
 const router = Router();
 
@@ -22,63 +23,22 @@ router.post('/generate', async (req, res): Promise<void> => {
       return;
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    
-    if (!apiKey) {
-      // Fallback: simple placeholder questions
-      const questions = generateFallbackQuestions(topic, numQuestions);
-      res.json({ ok: true, questions, note: 'Using fallback questions (no API key)' });
-      return;
-    }
-
     // Get topic context from estimates if available
     const estimate = await TopicEstimateModel.findOne({ userId, syllabusId, topic }).lean();
     const topicContext = estimate ? `Topic estimated to take ${estimate.estimatedHours} hours with ${estimate.confidence}% confidence.` : '';
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1500,
-        temperature: 0.7,
-        system:
-          'You are creating quiz questions for students. Return JSON only with shape: { "questions": Array<{ "question": string, "options": string[4], "correctAnswer": number (0-3), "explanation": string }>. Questions should test understanding, not just recall. Vary difficulty.',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Generate ${numQuestions} multiple-choice quiz questions about: ${topic}\n\n${topicContext}\n\nEach question should have:\n- Clear, unambiguous question\n- 4 options (A, B, C, D)\n- One correct answer (specify index 0-3)\n- Brief explanation of why it's correct`,
-              },
-            ],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      console.warn(`Claude API error generating quiz: ${response.status}. Using fallback questions.`);
-      const questions = generateFallbackQuestions(topic, numQuestions);
-      res.json({ ok: true, questions, note: 'Using fallback questions due to API error' });
-      return;
-    }
-
-    const data = await response.json();
-    const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
-
     try {
+      const system = 'You are creating quiz questions for students. Return JSON only with shape: { "questions": Array<{ "question": string, "options": string[4], "correctAnswer": number (0-3), "explanation": string }> }. Questions should test understanding, not just recall. Vary difficulty.';
+      const prompt = `Generate ${numQuestions} multiple-choice quiz questions about: ${topic}\n\n${topicContext}\n\nEach question should have:\n- Clear, unambiguous question\n- 4 options (A, B, C, D)\n- One correct answer (specify index 0-3)\n- Brief explanation of why it's correct`;
+      const content = await callLLM(system, prompt, { maxTokens: 1500, temperature: 0.7, jsonMode: true });
       const parsed = JSON.parse(content);
       const questions = parsed.questions || [];
-      
+
       res.json({ ok: true, questions });
     } catch {
-      res.status(500).json({ error: 'Failed to parse Claude response' });
+      console.warn('AI quiz generation error, using fallback questions.');
+      const questions = generateFallbackQuestions(topic, numQuestions);
+      res.json({ ok: true, questions, note: 'Using fallback questions due to AI error' });
     }
   } catch (err) {
     console.error('Quiz generation error', err);

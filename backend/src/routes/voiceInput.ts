@@ -112,8 +112,8 @@ router.get('/test', (req, res): void => {
     ok: true,
     message: 'Voice input API is running',
     supportedFeatures: [
-      'Audio transcription via Whisper',
-      'Intent parsing via Claude',
+      'Audio transcription via Groq Whisper',
+      'Intent parsing via AI',
       'Auto session logging',
     ],
   });

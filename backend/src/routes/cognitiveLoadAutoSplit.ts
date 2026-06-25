@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CognitiveLoadModel } from '../models/CognitiveLoad';
 import { StudyPlanModel } from '../models/StudyPlan';
+import { callLLM } from '../utils/aiProvider';
 
 const router = Router();
 
@@ -30,58 +31,27 @@ router.post('/', async (req, res): Promise<void> => {
       return;
     }
 
-    // Call Claude to suggest sub-modules for each high-load topic
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    // Ask AI to suggest sub-modules for each high-load topic
     const topicsToSplit = highLoadTopics.map(t => t.topic);
 
     let subModuleSuggestions: { [key: string]: string[] } = {};
 
-    if (apiKey) {
-      try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 1200,
-            temperature: 0.3,
-            system:
-              'You are breaking down complex topics into smaller, manageable sub-modules. Return JSON only: { "topics": Array<{ "topic": string, "subModules": string[] }> } where subModules are 2-4 smaller learning units.',
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: `Break these high cognitive load topics into 2-4 smaller sub-modules:\n\n${topicsToSplit.join('\n')}`,
-                  },
-                ],
-              },
-            ],
-          }),
-        });
+    try {
+      const system = 'You are breaking down complex topics into smaller, manageable sub-modules. Return JSON only: { "topics": Array<{ "topic": string, "subModules": string[] }> } where subModules are 2-4 smaller learning units.';
+      const prompt = `Break these high cognitive load topics into 2-4 smaller sub-modules:\n\n${topicsToSplit.join('\n')}`;
+      const content = await callLLM(system, prompt, { maxTokens: 1200, temperature: 0.3, jsonMode: true });
+      const parsed = JSON.parse(content);
 
-        if (response.ok) {
-          const data = await response.json();
-          const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
-          const parsed = JSON.parse(content);
-          
-          if (parsed.topics) {
-            parsed.topics.forEach((t: any) => {
-              subModuleSuggestions[t.topic] = t.subModules || [];
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Claude sub-module suggestion error:', error);
+      if (parsed.topics) {
+        parsed.topics.forEach((t: any) => {
+          subModuleSuggestions[t.topic] = t.subModules || [];
+        });
       }
+    } catch (error) {
+      console.error('AI sub-module suggestion error:', error);
     }
 
-    // If Claude failed or no API key, use simple heuristic
+    // If AI failed, use simple heuristic
     if (Object.keys(subModuleSuggestions).length === 0) {
       highLoadTopics.forEach(topic => {
         subModuleSuggestions[topic.topic] = [

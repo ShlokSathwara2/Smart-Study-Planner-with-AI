@@ -15,6 +15,9 @@ import { CognitiveLoadTracker } from "@/components/CognitiveLoadTracker";
 import { DigitalTwinProfile } from "@/components/DigitalTwinProfile";
 import { VoiceInput } from "@/components/VoiceInput";
 import { StrategyChat } from "@/components/StrategyChat";
+import { ReviewBanner } from "@/components/ReviewBanner";
+import { ReadinessChart } from "@/components/ReadinessChart";
+import { StudyInsightCard } from "@/components/StudyInsightCard";
 
 type Tab = "home" | "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive" | "profile" | "voice" | "strategy";
 
@@ -31,14 +34,15 @@ const TABS = [
   { id: "profile",   icon: "👤", label: "My Profile" },
 ];
 
-const STAT_CARDS = [
-  { icon: "🔥", label: "Day Streak",     value: "7",   unit: "days",  color: "from-orange-500/20 to-amber-600/10   border-orange-500/25", text: "text-orange-300" },
-  { icon: "📈", label: "Exam Readiness", value: "74",  unit: "%",     color: "from-emerald-500/20 to-emerald-600/10 border-emerald-500/25", text: "text-emerald-300" },
-  { icon: "⏰", label: "Studied Today",  value: "2.5", unit: "hrs",   color: "from-sky-500/20  to-sky-600/10        border-sky-500/25",     text: "text-sky-300" },
-  { icon: "🎯", label: "Topics Done",    value: "12",  unit: "/ 40",  color: "from-violet-500/20 to-violet-600/10  border-violet-500/25",   text: "text-violet-300" },
+interface StatCardDef { icon: string; label: string; key: string; unit: string; value: string; color: string; text: string; }
+const STAT_CARDS: Omit<StatCardDef, 'value'>[] = [
+  { icon: "🔥", label: "Day Streak",     key: "streak",    unit: "days", color: "from-orange-500/20 to-amber-600/10   border-orange-500/25", text: "text-orange-300" },
+  { icon: "📈", label: "Exam Readiness", key: "readiness", unit: "%",    color: "from-emerald-500/20 to-emerald-600/10 border-emerald-500/25", text: "text-emerald-300" },
+  { icon: "⏰", label: "Studied Today",  key: "studied",   unit: "hrs",  color: "from-sky-500/20  to-sky-600/10        border-sky-500/25",     text: "text-sky-300" },
+  { icon: "🎯", label: "Topics Done",    key: "topics",    unit: "",     color: "from-violet-500/20 to-violet-600/10  border-violet-500/25",   text: "text-violet-300" },
 ];
 
-function StatCard({ s, i }: { s: typeof STAT_CARDS[0]; i: number }) {
+function StatCard({ s, i }: { s: StatCardDef; i: number }) {
   const glowMap: Record<string, string> = {
     "text-orange-300":  "rgba(251,146,60,0.18)",
     "text-emerald-300": "rgba(52,211,153,0.18)",
@@ -57,7 +61,7 @@ function StatCard({ s, i }: { s: typeof STAT_CARDS[0]; i: number }) {
     "text-sky-300":     "linear-gradient(90deg,#0ea5e9,#38bdf8)",
     "text-violet-300":  "linear-gradient(90deg,#7c3aed,#a78bfa)",
   };
-  const barW = s.unit === "%" ? `${s.value}%` : s.unit === "days" ? "70%" : s.unit === "hrs" ? "55%" : "30%";
+  const barW = s.unit === "%" ? `${s.value}%` : s.unit === "days" ? "70%" : s.unit === "hrs" ? "55%" : "40%";
 
   return (
     <motion.div
@@ -102,34 +106,51 @@ export default function DashboardPage() {
   const [syllabusId, setSyllabusId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
   const [reviewsDueToday, setReviewsDueToday] = useState<number>(0);
+  const [readinessPct, setReadinessPct] = useState(74);
+  const [studiedToday, setStudiedToday] = useState(2.5);
+  const [streakDays, setStreakDays] = useState(7);
+  const [topicsDone, setTopicsDone] = useState(12);
+  const [totalTopics, setTotalTopics] = useState(40);
 
   useEffect(() => {
     if (isLoaded && user) {
       if (!user.unsafeMetadata?.onboarded) {
         router.replace("/onboarding");
       } else {
-        // Phase 12: Fetch plan to retrieve pending SM-2 reviews
-        fetch(`/api/plan/latest?userId=${user.id}`)
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.ok && data.plan) {
-              setPlanId(data.plan._id);
-              setSyllabusId(data.plan.syllabusId);
+        (async () => {
+          const planRes = await fetch(`/api/plan/latest?userId=${user.id}`).then(r => r.json());
+          const plan = planRes.ok ? planRes.plan : null;
+          const sid = plan?.syllabusId || syllabusId;
+          const [examRes, focusRes] = await Promise.all([
+            sid ? fetch(`/api/exam-predict/${sid}/quick-stats?userId=${user.id}`).then(r => r.json()).catch(() => null) : null,
+            fetch(`/api/focus/analytics?userId=${user.id}`).then(r => r.json()),
+          ]);
+          return { planRes, examRes, focusRes };
+        })().then(({ planRes, examRes, focusRes }) => {
+            if (planRes.ok && planRes.plan) {
+              setPlanId(planRes.plan._id);
+              setSyllabusId(planRes.plan.syllabusId);
               const today = new Date();
               today.setHours(23, 59, 59, 999);
-              const reviews = data.plan.sessions?.filter(
-                (s: any) =>
-                  s.status === "planned" &&
-                  s.topic.startsWith("[Review]") &&
-                  new Date(s.date) <= today
+              const reviews = planRes.plan.sessions?.filter(
+                (s: any) => s.status === "planned" && s.topic.startsWith("[Review]") && new Date(s.date) <= today
               );
               setReviewsDueToday(reviews?.length || 0);
+              setTopicsDone(planRes.plan.sessions?.filter((s: any) => s.status === "done").length || 0);
+              setTotalTopics(planRes.plan.sessions?.length || 40);
+            }
+            if (examRes?.ok && examRes?.stats) {
+              setReadinessPct(examRes.stats.readinessPercentage || 0);
+            }
+            if (focusRes?.ok) {
+              setStreakDays(focusRes.streakDays || 7);
+              setStudiedToday(focusRes.todayMinutes ? Math.round(focusRes.todayMinutes / 6) / 10 : 2.5);
             }
           })
           .catch(console.error);
       }
     }
-  }, [isLoaded, user, router]);
+  }, [isLoaded, user, router, syllabusId]);
 
   const displayName =
     (user?.unsafeMetadata?.displayName as string) ||
@@ -234,10 +255,20 @@ export default function DashboardPage() {
 
             {/* Stat cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {STAT_CARDS.map((s, i) => (
-                <StatCard key={s.label} s={s} i={i} />
-              ))}
+              {STAT_CARDS.map((s, i) => {
+                let val = "0";
+                switch (s.key) {
+                  case "streak": val = String(streakDays); break;
+                  case "readiness": val = String(readinessPct); break;
+                  case "studied": val = String(studiedToday); break;
+                  case "topics": val = `${topicsDone} / ${totalTopics}`; break;
+                }
+                return <StatCard key={s.label} s={{ ...s, value: val }} i={i} />;
+              })}
             </div>
+
+            {/* Due for review banner */}
+            <ReviewBanner reviewsDueToday={reviewsDueToday} userId={user?.id} />
 
             {/* Quick Actions */}
             <div>
@@ -351,6 +382,10 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-3xl font-bold text-slate-50">Session Analytics</h1>
               <p className="mt-1 text-slate-400 text-sm">Insights into your study habits and performance</p>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <ReadinessChart userId={user?.id} syllabusId={syllabusId || undefined} />
+              <StudyInsightCard userId={user?.id} syllabusId={syllabusId || undefined} />
             </div>
             <SessionAnalytics userId={user?.id} />
           </div>

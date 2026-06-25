@@ -1,5 +1,6 @@
 import { ExamPredictionModel } from '../models/ExamPrediction';
 import { aggregateExamSignals } from './examSignalAggregator';
+import { callLLM } from '../utils/aiProvider';
 
 interface PredictionResult {
   readinessPercentage: number;
@@ -35,14 +36,7 @@ export async function generateExamPrediction(
   // Aggregate all signals
   const signals = await aggregateExamSignals(userId, syllabusId);
   
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  
-  if (!apiKey) {
-    // Fallback: simple heuristic-based prediction
-    return generateFallbackPrediction(signals);
-  }
-  
-  // Prepare data for Claude
+  // Prepare data for AI
   const promptData = {
     syllabusCompletion: signals.syllabusCompletion,
     quizPerformance: signals.quizPerformance,
@@ -130,67 +124,36 @@ Respond in JSON format only:
   "examReadinessLabel": "string"
 }`;
 
+  const system = 'You are an expert educational assessor specializing in predicting student exam outcomes based on comprehensive learning analytics. Respond in valid JSON.';
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+    const content = await callLLM(system, prompt, { maxTokens: 1000, temperature: 0.3, jsonMode: true });
+    const parsed = JSON.parse(content);
+
+    return {
+      readinessPercentage: Math.min(100, Math.max(0, parsed.readinessPercentage || 50)),
+      predictedScoreRange: {
+        min: Math.min(100, Math.max(0, parsed.predictedScoreRange?.min || 40)),
+        max: Math.min(100, Math.max(0, parsed.predictedScoreRange?.max || 80)),
+        mostLikely: Math.min(100, Math.max(0, parsed.predictedScoreRange?.mostLikely || 60)),
       },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1000,
-        temperature: 0.3,
-        system: 'You are an expert educational assessor specializing in predicting student exam outcomes based on comprehensive learning analytics.',
-        messages: [
-          {
-            role: 'user',
-            content: [{ type: 'text', text: prompt }],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data?.content?.[0]?.text;
-
-    try {
-      const parsed = JSON.parse(content);
-      
-      // Validate and sanitize results
-      return {
-        readinessPercentage: Math.min(100, Math.max(0, parsed.readinessPercentage || 50)),
-        predictedScoreRange: {
-          min: Math.min(100, Math.max(0, parsed.predictedScoreRange?.min || 40)),
-          max: Math.min(100, Math.max(0, parsed.predictedScoreRange?.max || 80)),
-          mostLikely: Math.min(100, Math.max(0, parsed.predictedScoreRange?.mostLikely || 60)),
-        },
-        confidenceLevel: Math.min(100, Math.max(0, parsed.confidenceLevel || 50)),
-        breakdown: {
-          syllabusCompletionScore: Math.min(100, Math.max(0, parsed.breakdown?.syllabusCompletionScore || 50)),
-          quizPerformanceScore: Math.min(100, Math.max(0, parsed.breakdown?.quizPerformanceScore || 50)),
-          revisionQualityScore: Math.min(100, Math.max(0, parsed.breakdown?.revisionQualityScore || 50)),
-          timeInvestmentScore: Math.min(100, Math.max(0, parsed.breakdown?.timeInvestmentScore || 50)),
-          consistencyScore: Math.min(100, Math.max(0, parsed.breakdown?.consistencyScore || 50)),
-        },
-        riskTopics: Array.isArray(parsed.riskTopics) ? parsed.riskTopics.slice(0, 5) : [],
-        strongTopics: Array.isArray(parsed.strongTopics) ? parsed.strongTopics.slice(0, 5) : [],
-        trend: ['improving', 'stable', 'declining'].includes(parsed.trend) ? parsed.trend : 'stable',
-        aiAnalysis: parsed.aiAnalysis || 'Analysis not available',
-        recommendedActions: Array.isArray(parsed.recommendedActions) ? parsed.recommendedActions.slice(0, 5) : [],
-        examReadinessLabel: parsed.examReadinessLabel || 'Fair',
-      };
-    } catch {
-      console.error('Failed to parse Claude response, using fallback');
-      return generateFallbackPrediction(signals);
-    }
+      confidenceLevel: Math.min(100, Math.max(0, parsed.confidenceLevel || 50)),
+      breakdown: {
+        syllabusCompletionScore: Math.min(100, Math.max(0, parsed.breakdown?.syllabusCompletionScore || 50)),
+        quizPerformanceScore: Math.min(100, Math.max(0, parsed.breakdown?.quizPerformanceScore || 50)),
+        revisionQualityScore: Math.min(100, Math.max(0, parsed.breakdown?.revisionQualityScore || 50)),
+        timeInvestmentScore: Math.min(100, Math.max(0, parsed.breakdown?.timeInvestmentScore || 50)),
+        consistencyScore: Math.min(100, Math.max(0, parsed.breakdown?.consistencyScore || 50)),
+      },
+      riskTopics: Array.isArray(parsed.riskTopics) ? parsed.riskTopics.slice(0, 5) : [],
+      strongTopics: Array.isArray(parsed.strongTopics) ? parsed.strongTopics.slice(0, 5) : [],
+      trend: ['improving', 'stable', 'declining'].includes(parsed.trend) ? parsed.trend : 'stable',
+      aiAnalysis: parsed.aiAnalysis || 'Analysis not available',
+      recommendedActions: Array.isArray(parsed.recommendedActions) ? parsed.recommendedActions.slice(0, 5) : [],
+      examReadinessLabel: parsed.examReadinessLabel || 'Fair',
+    };
   } catch (error) {
-    console.error('Exam prediction generation failed:', error);
+    console.error('Exam prediction generation failed, using fallback:', error);
     return generateFallbackPrediction(signals);
   }
 }

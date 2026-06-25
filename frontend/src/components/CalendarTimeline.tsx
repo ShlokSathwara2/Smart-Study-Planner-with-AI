@@ -38,6 +38,8 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
   const [detectingGaps, setDetectingGaps] = useState(false);
   const [knowledgeGaps, setKnowledgeGaps] = useState<string[] | null>(null);
   const [showCalendarSync, setShowCalendarSync] = useState(false);
+  const [draggedSession, setDraggedSession] = useState<{ session: Session; index: number } | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   // New state added for I2, I4, I5
   const [behindDays, setBehindDays] = useState(0);
@@ -174,6 +176,42 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
     }
   };
 
+  const handleDragStart = (session: Session, index: number) => {
+    setDraggedSession({ session, index });
+  };
+
+  const handleDragOver = (e: React.DragEvent, date: string) => {
+    e.preventDefault();
+    setDragOverDate(date);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverDate(null);
+  };
+
+  const handleDrop = async (targetDate: string) => {
+    if (!draggedSession || !plan || !planId) { setDraggedSession(null); setDragOverDate(null); return; }
+    const updatedSessions = plan.sessions.map((s, i) => {
+      if (i === draggedSession.index) {
+        return { ...s, date: targetDate };
+      }
+      return s;
+    });
+    updatedSessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    setPlan({ ...plan, sessions: updatedSessions });
+    setDraggedSession(null);
+    setDragOverDate(null);
+    try {
+      await fetch(`${apiBase}/api/plan/${planId}/sessions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, sessions: updatedSessions }),
+      });
+    } catch (err) {
+      console.error('Failed to save drag-drop reorder:', err);
+    }
+  };
+
   const handleDetectGaps = async () => {
     if (!selectedSession || !syllabusId || !plan) return;
     setDetectingGaps(true);
@@ -264,6 +302,23 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
             )}
             <div className="flex items-center gap-3">
               <button
+                onClick={async () => {
+                  if (!planId) return;
+                  try {
+                    const res = await fetch(`${apiBase}/api/plan/${planId}/reschedule`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ userId }),
+                    });
+                    const data = await res.json();
+                    if (data.ok && data.plan) setPlan(data.plan);
+                  } catch (err) { console.error('Reschedule failed:', err); }
+                }}
+                className="px-3 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 transition-colors text-sm"
+              >
+                🔄 Reschedule
+              </button>
+              <button
                 onClick={() => setShowCalendarSync(!showCalendarSync)}
                 className="px-3 py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 text-green-300 transition-colors text-sm"
               >
@@ -304,18 +359,25 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
           {Array.from({ length: 7 }).map((_, i) => {
             const date = new Date(weekStart);
             date.setDate(date.getDate() + i);
+            const dateStr = date.toISOString().split('T')[0];
             const daySessions = displayedWeek.filter(s => 
               new Date(s.date).toDateString() === date.toDateString()
             );
+            const isDragOver = dragOverDate === dateStr;
             
             return (
               <div
                 key={i}
-                className={`rounded-lg p-3 border ${
-                  daySessions.length > 0
-                    ? "border-indigo-500/30 bg-indigo-500/10"
-                    : "border-white/5 bg-white/[0.02]"
-                }`}
+                onDragOver={(e) => handleDragOver(e, dateStr)}
+                onDragLeave={handleDragLeave}
+                onDrop={() => handleDrop(dateStr)}
+                className={`rounded-lg p-3 border transition-all duration-200 ${
+                  isDragOver
+                    ? "border-indigo-400/60 bg-indigo-500/20 scale-105"
+                    : daySessions.length > 0
+                      ? "border-indigo-500/30 bg-indigo-500/10"
+                      : "border-white/5 bg-white/[0.02]"
+                } ${draggedSession ? "cursor-copy" : ""}`}
               >
                 <p className="text-xs text-slate-400 mb-1">
                   {date.toLocaleDateString("en-US", { weekday: "short" })}
@@ -323,18 +385,29 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
                 <p className="text-lg font-bold text-slate-100 mb-2">
                   {date.getDate()}
                 </p>
-                {daySessions.map((session, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    className={`mb-1 px-2 py-1 rounded text-xs cursor-pointer ${getStatusColor(session.status)}`}
-                    onClick={() => setSelectedSession(session)}
-                    whileHover={{ scale: 1.05 }}
-                  >
-                    {session.topic.substring(0, 15)}...
-                  </motion.div>
-                ))}
+                {daySessions.map((session, idx) => {
+                  const globalIndex = plan.sessions.findIndex(
+                    (s, gi) => s.topic === session.topic && s.date === session.date && gi >= currentWeek * 7 && gi < (currentWeek + 1) * 7
+                  );
+                  const actualIndex = globalIndex >= 0 ? globalIndex : plan.sessions.indexOf(session);
+                  return (
+                    <motion.div
+                      key={idx}
+                      initial={{ scale: 0.8 }}
+                      animate={{ scale: 1 }}
+                      draggable
+                      onDragStart={() => handleDragStart(session, actualIndex)}
+                      className={`mb-1 px-2 py-1 rounded text-xs cursor-grab active:cursor-grabbing ${getStatusColor(session.status)}`}
+                      onClick={() => setSelectedSession(session)}
+                      whileHover={{ scale: 1.05 }}
+                    >
+                      {session.topic.substring(0, 15)}...
+                    </motion.div>
+                  );
+                })}
+                {isDragOver && (
+                  <div className="mt-1 text-[10px] text-indigo-300 font-medium">Drop here</div>
+                )}
               </div>
             );
           })}

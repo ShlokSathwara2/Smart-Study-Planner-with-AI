@@ -1,5 +1,6 @@
 import { DigitalTwinModel } from '../models/DigitalTwin';
 import { aggregateUserBehavior, calculateLearningStyle, calculatePerformanceMetrics, calculateTimePatterns } from './behaviorAggregator';
+import { callLLM } from '../utils/aiProvider';
 
 interface PredictiveInsights {
   predictedExamScore: number;
@@ -129,13 +130,6 @@ export async function generateAISummary(
   syllabusId: string,
   digitalTwinData: any
 ): Promise<{ aiSummary: string; learningPersonality: string }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
-    // Fallback: generate simple summary without Claude
-    return generateFallbackSummary(digitalTwinData);
-  }
-
   const prompt = `You are an expert educational psychologist analyzing a student's learning patterns. Based on the following data, create:
 
 1. A concise 2-3 sentence summary of their learning profile
@@ -167,46 +161,15 @@ Respond in this exact JSON format:
   "personality": "2-4 word label"
 }`;
 
+  const system = 'You are an encouraging educational psychologist who provides insightful, actionable feedback to students. Always respond in valid JSON.';
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 300,
-        temperature: 0.7,
-        system:
-          'You are an encouraging educational psychologist who provides insightful, actionable feedback to students.',
-        messages: [
-          {
-            role: 'user',
-            content: [{ type: 'text', text: prompt }],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data?.content?.[0]?.text;
-
-    try {
-      const parsed = JSON.parse(content);
-      return {
-        aiSummary: parsed.summary || generateFallbackSummary(digitalTwinData).aiSummary,
-        learningPersonality:
-          parsed.personality || generateFallbackSummary(digitalTwinData).learningPersonality,
-      };
-    } catch {
-      return generateFallbackSummary(digitalTwinData);
-    }
+    const content = await callLLM(system, prompt, { maxTokens: 300, temperature: 0.7, jsonMode: true });
+    const parsed = JSON.parse(content);
+    return {
+      aiSummary: parsed.summary || generateFallbackSummary(digitalTwinData).aiSummary,
+      learningPersonality: parsed.personality || generateFallbackSummary(digitalTwinData).learningPersonality,
+    };
   } catch (error) {
     console.error('AI summary generation failed:', error);
     return generateFallbackSummary(digitalTwinData);

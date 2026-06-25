@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { SyllabusModel } from '../models/Syllabus';
+import { callLLM } from '../utils/aiProvider';
 
 const router = Router();
 
@@ -26,9 +27,16 @@ router.post('/analyze', async (req, res): Promise<void> => {
       }
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      // Mock fallback if no API key
+    try {
+      const system = `You are an expert AI tutor. A student (Level: ${grade}) is struggling with the topic: "${topicTitle}". Identify 1-3 foundational or preliminary concepts they MUST understand before grasping this topic. Return them as a flat JSON array of strings.`;
+      const prompt = `${contextString}Identify the foundational prerequisites for: ${topicTitle}`;
+      const content = await callLLM(system, prompt, { maxTokens: 500, temperature: 0.1, jsonMode: true });
+
+      const parsed = JSON.parse(content);
+      const foundations = Array.isArray(parsed) ? parsed : [];
+
+      res.json({ ok: true, foundations });
+    } catch {
       res.json({
         ok: true,
         foundations: [
@@ -36,49 +44,6 @@ router.post('/analyze', async (req, res): Promise<void> => {
           `Core Principles of ${topicTitle}`
         ]
       });
-      return;
-    }
-
-    // Prompt Claude
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 500,
-        temperature: 0.1,
-        system: `You are an expert AI tutor. A student (Level: ${grade}) is struggling with the topic: "${topicTitle}". Identify 1-3 foundational or preliminary concepts they MUST understand before grasping this topic. Return them as a flat JSON array of strings. Example: ["Foundational Concept 1", "Foundational Concept 2"]`,
-        messages: [
-          {
-            role: 'user',
-            content: [{ type: 'text', text: `${contextString}Identify the foundational prerequisites for: ${topicTitle}` }],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data?.content?.[0]?.text ?? '';
-
-    try {
-      const match = content.match(/\[.*\]/s);
-      if (match) {
-        const foundations = JSON.parse(match[0]);
-        res.json({ ok: true, foundations });
-      } else {
-        const strictParse = JSON.parse(content);
-        res.json({ ok: true, foundations: strictParse });
-      }
-    } catch {
-      res.status(500).json({ error: 'Failed to parse AI response into foundations array' });
     }
   } catch (err) {
     console.error('Gap Detector analysis error', err);

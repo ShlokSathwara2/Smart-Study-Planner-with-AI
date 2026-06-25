@@ -1,0 +1,12 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/.next",
+  "installCommand": "cd frontend && npm install",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://smart-study-planner-api.railway.app/api/:path*"
+    }
+  ]
+}

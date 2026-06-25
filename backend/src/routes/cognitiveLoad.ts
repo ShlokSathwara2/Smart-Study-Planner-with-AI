@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { CognitiveLoadModel } from '../models/CognitiveLoad';
+import { callLLM } from '../utils/aiProvider';
 
 const router = Router();
 
@@ -128,62 +129,14 @@ router.post('/analyze', async (req, res): Promise<void> => {
       sessions: r.signals.length,
     }));
 
-    // Call Claude API
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      // Fallback: simple heuristic-based analysis
-      records.forEach(record => {
-        const score = calculateHeuristicScore(record);
-        record.cognitiveLoadScore = score;
-        record.difficultyLevel = getDifficultyLevel(score);
-        record.shouldSplit = score > 75;
-        record.splitSuggestions = score > 75 ? [`Break ${record.topic} into smaller sub-topics`] : [];
-      });
-      await Promise.all(records.map(r => r.save()));
-      
-      res.json({ ok: true, records });
-      return;
-    }
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1500,
-        temperature: 0,
-        system:
-          'You are an educational psychologist analyzing cognitive load for students. Return JSON only with shape: { "topics": Array<{ "topic": string, "cognitiveLoadScore": number (0-100), "difficultyLevel": "easy|medium|hard|very-hard", "shouldSplit": boolean, "splitSuggestions": string[] }>. Score > 75 means topic should be split.',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Analyze cognitive load for these study topics:\n\n${JSON.stringify(topicsData, null, 2)}\n\nConsider:\n- High time + low accuracy = high cognitive load\n- Many pauses = confusion/difficulty\n- Multiple sessions needed = complexity\n\nReturn detailed analysis with recommendations for splitting difficult topics.`,
-              },
-            ],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data?.content?.[0]?.text ?? data?.content?.[0]?.[0]?.text;
-
+    // Call AI provider
     try {
+      const system = 'You are an educational psychologist analyzing cognitive load. Return JSON only with shape: { "topics": Array<{ "topic": string, "cognitiveLoadScore": number (0-100), "difficultyLevel": "easy|medium|hard|very-hard", "shouldSplit": boolean, "splitSuggestions": string[] }> }';
+      const prompt = `Analyze cognitive load for these study topics:\n\n${JSON.stringify(topicsData, null, 2)}\n\nConsider:\n- High time + low accuracy = high cognitive load\n- Many pauses = confusion/difficulty\n- Multiple sessions needed = complexity\n\nReturn detailed analysis with recommendations for splitting difficult topics.`;
+      const content = await callLLM(system, prompt, { maxTokens: 1500, temperature: 0, jsonMode: true });
       const analysis = JSON.parse(content);
       const topicsAnalysis = analysis.topics || [];
 
-      // Update records with Claude's analysis
       const updatePromises = records.map(async (record) => {
         const topicAnalysis = topicsAnalysis.find((t: any) => t.topic === record.topic);
         if (topicAnalysis) {
@@ -196,10 +149,18 @@ router.post('/analyze', async (req, res): Promise<void> => {
       });
 
       await Promise.all(updatePromises);
-
       res.json({ ok: true, records });
     } catch {
-      res.status(500).json({ error: 'Failed to parse Claude response' });
+      // Fallback: simple heuristic-based analysis
+      records.forEach(record => {
+        const score = calculateHeuristicScore(record);
+        record.cognitiveLoadScore = score;
+        record.difficultyLevel = getDifficultyLevel(score);
+        record.shouldSplit = score > 75;
+        record.splitSuggestions = score > 75 ? [`Break ${record.topic} into smaller sub-topics`] : [];
+      });
+      await Promise.all(records.map(r => r.save()));
+      res.json({ ok: true, records, note: 'Used heuristic analysis (AI unavailable)' });
     }
   } catch (err) {
     console.error('Cognitive load analyze error', err);
