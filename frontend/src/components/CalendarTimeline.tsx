@@ -29,7 +29,6 @@ interface CalendarViewProps {
 }
 
 export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewProps) {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const [plan, setPlan] = useState<StudyPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentWeek, setCurrentWeek] = useState(0);
@@ -68,7 +67,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
 
           // Phase 7 (I5): Fetch estimates
           if (data.plan.syllabusId) {
-             const estRes = await fetch(`${apiBase}/api/estimates/by-syllabus/${data.plan.syllabusId}?userId=${userId}`);
+             const estRes = await fetch(`/api/estimates/by-syllabus/${data.plan.syllabusId}?userId=${userId}`);
              const estData = await estRes.json();
              if (estData.ok && estData.estimates) {
                const estMap: Record<string, any> = {};
@@ -77,7 +76,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
              }
 
              // Phase 10 (I2): Fetch weak topics
-             const weakRes = await fetch(`${apiBase}/api/weak-topics/by-syllabus/${data.plan.syllabusId}?userId=${userId}`);
+             const weakRes = await fetch(`/api/weak-topics/by-syllabus/${data.plan.syllabusId}?userId=${userId}`);
              const weakData = await weakRes.json();
              if (weakData.ok && weakData.weakTopics) {
                setWeakTopics(weakData.weakTopics.map((w: any) => w.topic.toLowerCase()));
@@ -159,7 +158,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
   const handleUpdateSessionStatus = async (sessionId: number, status: Session["status"]) => {
     try {
       // Fix B4: Correct URL & PATCH body mapping {userId, sessionIndex, status}
-      const response = await fetch(`${apiBase}/api/plan/${planId}/session`, {
+      const response = await fetch(`/api/plan/${planId}/session`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, sessionIndex: sessionId, status }),
@@ -202,7 +201,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
     setDraggedSession(null);
     setDragOverDate(null);
     try {
-      await fetch(`${apiBase}/api/plan/${planId}/sessions`, {
+      await fetch(`/api/plan/${planId}/sessions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, sessions: updatedSessions }),
@@ -220,12 +219,12 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
     try {
       // Phase 11 & Phase 13 Concurrency: Detect both Missing Prerequisites and Semantic Dependencies
       const [gapResponse, semanticResponse] = await Promise.all([
-        fetch(`${apiBase}/api/gap-detector/analyze`, {
+        fetch(`/api/gap-detector/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, syllabusId, topicTitle: selectedSession.topic }),
         }).catch(e => ({ ok: false, json: () => ({ error: e }) })),
-        fetch(`${apiBase}/api/weak-topics/flag-semantic`, {
+        fetch(`/api/weak-topics/flag-semantic`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ syllabusId, topicTitle: selectedSession.topic }),
@@ -305,7 +304,7 @@ export function CalendarTimeline({ planId, userId, syllabusId }: CalendarViewPro
                 onClick={async () => {
                   if (!planId) return;
                   try {
-                    const res = await fetch(`${apiBase}/api/plan/${planId}/reschedule`, {
+                    const res = await fetch(`/api/plan/${planId}/reschedule`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ userId }),
