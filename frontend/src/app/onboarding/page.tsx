@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import Radar from "@/components/Radar";
 
 const GRADES = ["Class 9","Class 10","Class 11","Class 12","Undergraduate","Postgraduate","Professional"];
 const GOALS = [
@@ -65,6 +66,20 @@ export default function OnboardingPage() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden" style={{ background: "#060818" }}>
+      {/* Radar background */}
+      <div className="pointer-events-none absolute inset-0 z-0 opacity-30">
+        <Radar
+          speed={0.3}
+          scale={0.7}
+          ringCount={10}
+          spokeCount={8}
+          color="#6366f1"
+          backgroundColor="transparent"
+          brightness={0.4}
+          enableMouseInteraction={true}
+          mouseInfluence={0.05}
+        />
+      </div>
       {/* BG orbs */}
       <div className="pointer-events-none absolute top-[-180px] left-[8%] h-[600px] w-[600px] rounded-full blur-[110px] animate-float"
         style={{ background: "radial-gradient(circle, rgba(99,102,241,0.14) 0%, transparent 70%)" }} />

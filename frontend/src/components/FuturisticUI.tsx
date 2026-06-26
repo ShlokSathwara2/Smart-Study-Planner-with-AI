@@ -3,6 +3,7 @@
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
+import Radar from "@/components/Radar";
 
 const FEATURES = [
   { icon: "🧠", title: "AI Study Planner", desc: "Claude-powered micro scheduling that adapts to your cognitive load in real time", color: "rgba(99,102,241,0.7)", bg: "rgba(99,102,241,0.10)" },
@@ -87,7 +88,20 @@ export function FuturisticUI() {
       </nav>
 
       {/* ── HERO ── */}
-      <section className="relative pt-32 pb-20 px-6 lg:px-12 min-h-screen flex items-center">
+      <section className="relative pt-32 pb-20 px-6 lg:px-12 min-h-screen flex items-center overflow-hidden">
+        <div className="absolute inset-0 z-0 opacity-40">
+          <Radar
+            speed={0.3}
+            scale={0.7}
+            ringCount={10}
+            spokeCount={8}
+            color="#6366f1"
+            backgroundColor="transparent"
+            brightness={0.5}
+            enableMouseInteraction={true}
+            mouseInfluence={0.1}
+          />
+        </div>
         <motion.div style={{ y: heroY, opacity: heroOpacity }} className="relative z-10 max-w-5xl mx-auto w-full text-center">
           {/* Badge */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.5 }}

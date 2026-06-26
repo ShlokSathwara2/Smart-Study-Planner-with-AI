@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ReactNode, useState } from "react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
+import Radar from "@/components/Radar";
 
 interface SidebarLayoutProps { children: ReactNode; }
 
@@ -65,7 +66,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
             <p className="text-xs font-semibold text-slate-100 truncate">{displayName}</p>
             {grade && <p className="text-[10px] text-indigo-400/80 truncate">{grade}</p>}
           </div>
-          <UserButton afterSignOutUrl="/" />
+          <UserButton />
         </div>
         {goal && (
           <div className="mt-2 rounded-lg bg-white/[0.04] px-2.5 py-1.5 border border-white/[0.06]">
@@ -178,10 +179,24 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
       </AnimatePresence>
 
       {/* Main content */}
-      <main className="flex-1 min-w-0 overflow-auto">
-        <div className="lg:hidden h-14" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
-          {children}
+      <main className="flex-1 min-w-0 overflow-auto relative">
+        <div className="fixed inset-0 z-0 opacity-20 pointer-events-none">
+          <Radar
+            speed={0.2}
+            scale={0.8}
+            ringCount={8}
+            spokeCount={6}
+            color="#6366f1"
+            backgroundColor="transparent"
+            brightness={0.3}
+            enableMouseInteraction={false}
+          />
+        </div>
+        <div className="relative z-10">
+          <div className="lg:hidden h-14" />
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
+            {children}
+          </div>
         </div>
       </main>
     </div>

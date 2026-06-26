@@ -32,8 +32,8 @@ export function FuturisticLayout({ children, className = '' }: FuturisticLayoutP
       opacity: number;
 
       constructor() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
+        this.x = Math.random() * canvas!.width;
+        this.y = Math.random() * canvas!.height;
         this.vx = (Math.random() - 0.5) * 0.5;
         this.vy = (Math.random() - 0.5) * 0.5;
         this.radius = Math.random() * 1.5;
@@ -56,17 +56,17 @@ export function FuturisticLayout({ children, className = '' }: FuturisticLayoutP
         this.vx *= 0.99;
         this.vy *= 0.99;
 
-        if (this.x > canvas.width) this.x = 0;
-        if (this.x < 0) this.x = canvas.width;
-        if (this.y > canvas.height) this.y = 0;
-        if (this.y < 0) this.y = canvas.height;
+        if (this.x > canvas!.width) this.x = 0;
+        if (this.x < 0) this.x = canvas!.width;
+        if (this.y > canvas!.height) this.y = 0;
+        if (this.y < 0) this.y = canvas!.height;
       }
 
       draw() {
-        ctx.fillStyle = `rgba(34, 211, 238, ${this.opacity})`;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fill();
+        ctx!.fillStyle = `rgba(34, 211, 238, ${this.opacity})`;
+        ctx!.beginPath();
+        ctx!.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx!.fill();
       }
     }
 
@@ -78,8 +78,8 @@ export function FuturisticLayout({ children, className = '' }: FuturisticLayoutP
     let animationId: number;
 
     const animate = () => {
-      ctx.fillStyle = 'rgba(10, 10, 42, 0.1)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx!.fillStyle = 'rgba(10, 10, 42, 0.1)';
+      ctx!.fillRect(0, 0, canvas!.width, canvas!.height);
 
       particles.forEach((p) => {
         p.update(mousePosition.x, mousePosition.y);
@@ -93,12 +93,12 @@ export function FuturisticLayout({ children, className = '' }: FuturisticLayoutP
           const distance = Math.sqrt(dx * dx + dy * dy);
 
           if (distance < 100) {
-            ctx.strokeStyle = `rgba(34, 211, 238, ${0.1 * (1 - distance / 100)})`;
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.stroke();
+            ctx!.strokeStyle = `rgba(34, 211, 238, ${0.1 * (1 - distance / 100)})`;
+            ctx!.lineWidth = 0.5;
+            ctx!.beginPath();
+            ctx!.moveTo(particles[i].x, particles[i].y);
+            ctx!.lineTo(particles[j].x, particles[j].y);
+            ctx!.stroke();
           }
         }
       }
@@ -113,8 +113,8 @@ export function FuturisticLayout({ children, className = '' }: FuturisticLayoutP
     };
 
     const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas!.width = window.innerWidth;
+      canvas!.height = window.innerHeight;
     };
 
     window.addEventListener('mousemove', handleMouseMove);
