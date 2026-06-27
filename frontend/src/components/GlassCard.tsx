@@ -3,7 +3,7 @@
 import { ReactNode, useRef, useState } from "react";
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 
-type GlowColor = "cyan" | "purple" | "pink" | "indigo" | "emerald" | "default";
+type GlowColor = "cyan" | "purple" | "pink" | "indigo" | "emerald" | "teal" | "default";
 
 interface GlassCardProps {
   children: ReactNode;
@@ -20,7 +20,8 @@ const glowColorMap: Record<GlowColor, { border: string; shadow: string; bg: stri
   pink:    { border: "rgba(236,72,153,0.35)",    shadow: "rgba(236,72,153,0.18)",  bg: "rgba(236,72,153,0.06)",    accent: "rgba(236,72,153,0.7)" },
   indigo:  { border: "rgba(99,102,241,0.35)",    shadow: "rgba(99,102,241,0.18)",  bg: "rgba(99,102,241,0.06)",    accent: "rgba(99,102,241,0.7)" },
   emerald: { border: "rgba(52,211,153,0.35)",    shadow: "rgba(52,211,153,0.18)",  bg: "rgba(52,211,153,0.06)",    accent: "rgba(52,211,153,0.7)" },
-  default: { border: "rgba(255,255,255,0.10)",   shadow: "rgba(0,0,0,0.3)",        bg: "rgba(255,255,255,0.03)",   accent: "rgba(99,102,241,0.5)" },
+  teal:    { border: "rgba(20,184,166,0.35)",    shadow: "rgba(20,184,166,0.18)",  bg: "rgba(20,184,166,0.06)",    accent: "rgba(20,184,166,0.7)" },
+  default: { border: "rgba(0,0,0,0.06)",         shadow: "rgba(0,0,0,0.06)",       bg: "rgba(20,184,166,0.04)",    accent: "rgba(20,184,166,0.5)" },
 };
 
 export function GlassCard({
@@ -39,8 +40,8 @@ export function GlassCard({
   const springX = useSpring(mouseX, { stiffness: 180, damping: 28 });
   const springY = useSpring(mouseY, { stiffness: 180, damping: 28 });
 
-  const rotateX = useTransform(springY, [-0.5, 0.5], [noHover ? 0 : 3.5, noHover ? 0 : -3.5]);
-  const rotateY = useTransform(springX, [-0.5, 0.5], [noHover ? 0 : -3.5, noHover ? 0 : 3.5]);
+  const rotateX = useTransform(springY, [-0.5, 0.5], [noHover ? 0 : 2, noHover ? 0 : -2]);
+  const rotateY = useTransform(springX, [-0.5, 0.5], [noHover ? 0 : -2, noHover ? 0 : 2]);
 
   const colors = glow ? glowColorMap[glowColor] : glowColorMap.default;
 
@@ -71,13 +72,13 @@ export function GlassCard({
         rotateX,
         rotateY,
         transformPerspective: 900,
-        background: "linear-gradient(135deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.02) 100%)",
-        backdropFilter: "blur(32px)",
-        WebkitBackdropFilter: "blur(32px)",
-        border: `1px solid ${isHovered && !noHover ? colors.border : "rgba(255,255,255,0.08)"}`,
+        background: "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.6) 100%)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        border: `1px solid ${isHovered && !noHover ? colors.border : "rgba(0,0,0,0.05)"}`,
         boxShadow: isHovered && !noHover
-          ? `0 8px 40px rgba(0,0,0,0.45), 0 0 0 1px ${colors.border}, inset 0 1px 0 rgba(255,255,255,0.10)`
-          : "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)",
+          ? `0 8px 32px rgba(0,0,0,0.08), 0 0 0 1px ${colors.border}`
+          : "0 2px 12px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.03)",
       }}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
@@ -102,36 +103,9 @@ export function GlassCard({
         className="absolute top-0 left-0 right-0 h-px pointer-events-none transition-opacity duration-300"
         style={{
           background: `linear-gradient(90deg, transparent, ${colors.accent}, transparent)`,
-          opacity: isHovered ? 0.8 : 0.25,
+          opacity: isHovered ? 0.6 : 0.15,
         }}
       />
-
-      {/* Bottom glow line */}
-      {glow && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-px pointer-events-none transition-opacity duration-300"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${colors.accent}, transparent)`,
-            opacity: isHovered ? 0.5 : 0,
-          }}
-        />
-      )}
-
-      {/* Glass shine sweep */}
-      <div
-        className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden"
-        aria-hidden
-      >
-        <motion.div
-          className="absolute top-0 h-full w-1/3"
-          style={{
-            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.045), transparent)",
-            transform: "skewX(-15deg)",
-            left: isHovered ? "150%" : "-60%",
-            transition: isHovered ? "left 0.7s ease" : "none",
-          }}
-        />
-      </div>
 
       {children}
     </motion.div>

@@ -18,6 +18,7 @@ import { StrategyChat } from "@/components/StrategyChat";
 import { ReviewBanner } from "@/components/ReviewBanner";
 import { ReadinessChart } from "@/components/ReadinessChart";
 import { StudyInsightCard } from "@/components/StudyInsightCard";
+import ClickSpark from "@/components/ClickSpark";
 
 type Tab = "home" | "upload" | "graph" | "schedule" | "focus" | "analytics" | "cognitive" | "profile" | "voice" | "strategy";
 
@@ -34,68 +35,93 @@ const TABS = [
   { id: "profile",   icon: "👤", label: "My Profile" },
 ];
 
-interface StatCardDef { icon: string; label: string; key: string; unit: string; value: string; color: string; text: string; }
-const STAT_CARDS: Omit<StatCardDef, 'value'>[] = [
-  { icon: "🔥", label: "Day Streak",     key: "streak",    unit: "days", color: "from-orange-500/20 to-amber-600/10   border-orange-500/25", text: "text-orange-300" },
-  { icon: "📈", label: "Exam Readiness", key: "readiness", unit: "%",    color: "from-emerald-500/20 to-emerald-600/10 border-emerald-500/25", text: "text-emerald-300" },
-  { icon: "⏰", label: "Studied Today",  key: "studied",   unit: "hrs",  color: "from-sky-500/20  to-sky-600/10        border-sky-500/25",     text: "text-sky-300" },
-  { icon: "🎯", label: "Topics Done",    key: "topics",    unit: "",     color: "from-violet-500/20 to-violet-600/10  border-violet-500/25",   text: "text-violet-300" },
+const STUDENTS = [
+  { name: "Tom Smith", score: 85, color: "#14b8a6" },
+  { name: "Olivia Jones", score: 95, color: "#0d9488" },
+  { name: "Michael Brown", score: 56, color: "#f59e0b" },
+  { name: "Emma Wilson", score: 72, color: "#10b981" },
 ];
 
-function StatCard({ s, i }: { s: StatCardDef; i: number }) {
-  const glowMap: Record<string, string> = {
-    "text-orange-300":  "rgba(251,146,60,0.18)",
-    "text-emerald-300": "rgba(52,211,153,0.18)",
-    "text-sky-300":     "rgba(125,211,252,0.18)",
-    "text-violet-300":  "rgba(167,139,250,0.18)",
-  };
-  const borderMap: Record<string, string> = {
-    "text-orange-300":  "rgba(251,146,60,0.25)",
-    "text-emerald-300": "rgba(52,211,153,0.25)",
-    "text-sky-300":     "rgba(125,211,252,0.25)",
-    "text-violet-300":  "rgba(167,139,250,0.25)",
-  };
-  const barMap: Record<string, string> = {
-    "text-orange-300":  "linear-gradient(90deg,#f97316,#fb923c)",
-    "text-emerald-300": "linear-gradient(90deg,#10b981,#34d399)",
-    "text-sky-300":     "linear-gradient(90deg,#0ea5e9,#38bdf8)",
-    "text-violet-300":  "linear-gradient(90deg,#7c3aed,#a78bfa)",
-  };
-  const barW = s.unit === "%" ? `${s.value}%` : s.unit === "days" ? "70%" : s.unit === "hrs" ? "55%" : "40%";
+const LESSONS = [
+  { title: "High fidelity worksheets", time: "Today, 10:00 AM", subject: "Mathematics", icon: "📐" },
+  { title: "High fidelity worksheets", time: "Today, 11:00 AM", subject: "Mathematics", icon: "📐" },
+  { title: "High fidelity worksheets", time: "Today, 12:00 PM", subject: "Mathematics", icon: "📐" },
+];
+
+const EVENTS = [
+  { time: "8:30 am", label: "Biology", color: "#14b8a6" },
+  { time: "9:30 am", label: "Chemistry", color: "#f59e0b" },
+  { time: "10:30 am", label: "Physics", color: "#ef4444" },
+];
+
+const NOTES = [
+  "prepare question for final exam",
+  "prepare question for final exam",
+  "prepare question for final exam",
+];
+
+function MiniCalendar() {
+  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const dates = Array.from({ length: 30 }, (_, i) => i + 1);
+  const today = 27;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.08, duration: 0.45, ease: "easeOut" }}
-      whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.97 }}
-      className="relative rounded-2xl overflow-hidden cursor-default glass-shine"
-      style={{
-        background: `linear-gradient(135deg, ${glowMap[s.text] || "rgba(99,102,241,0.12)"} 0%, rgba(255,255,255,0.03) 100%)`,
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
-        border: `1px solid ${borderMap[s.text] || "rgba(255,255,255,0.1)"}`,
-        boxShadow: `0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.07)`,
-      }}
-    >
-      <div className="p-5">
-        <div className="flex items-start justify-between mb-3">
-          <span className="text-2xl">{s.icon}</span>
-          <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shadow shadow-emerald-400/60" />
-            <span className="text-[9px] text-emerald-400/70 font-medium uppercase tracking-widest">Live</span>
-          </div>
-        </div>
-        <p className={`text-3xl font-bold tabular-nums ${s.text} animate-number-up`}>
-          {s.value}<span className="text-sm font-medium ml-1 opacity-60">{s.unit}</span>
-        </p>
-        <p className="mt-1 text-xs text-slate-500 font-medium">{s.label}</p>
-        <div className="mt-3 h-0.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-          <motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: barW }}
-            style={{ background: barMap[s.text] || "linear-gradient(90deg,#6366f1,#a78bfa)" }}
-            transition={{ delay: i * 0.08 + 0.5, duration: 1.1, ease: "easeOut" }} />
+    <div className="dashboard-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="section-title">June 2025</h3>
+        <div className="flex gap-1">
+          <button className="w-6 h-6 rounded-md hover:bg-teal-50 flex items-center justify-center text-xs text-gray-400">{"<"}</button>
+          <button className="w-6 h-6 rounded-md hover:bg-teal-50 flex items-center justify-center text-xs text-gray-400">{">"}</button>
         </div>
       </div>
-    </motion.div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {days.map((d) => (
+          <div key={d} className="text-center text-[9px] font-semibold text-gray-400 py-1">{d}</div>
+        ))}
+        {dates.map((d) => (
+          <div
+            key={d}
+            className={`text-center text-xs py-1.5 rounded-lg cursor-pointer transition-colors ${
+              d === today
+                ? "bg-teal-500 text-white font-semibold"
+                : "text-gray-600 hover:bg-teal-50"
+            }`}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AttendanceChart() {
+  return (
+    <div className="dashboard-card p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="section-title">Total attendance report</h3>
+        <div className="flex items-center gap-1 bg-teal-50 rounded-lg px-3 py-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          <span className="text-xs font-semibold text-teal-600">weekly</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 500 120" className="w-full h-28">
+        <defs>
+          <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.3"/>
+            <stop offset="100%" stopColor="#14b8a6" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M0,80 C40,70 80,40 120,50 C160,60 200,90 240,85 C280,80 320,30 360,40 C400,50 440,70 480,60 L500,55 L500,120 L0,120 Z" fill="url(#waveGrad)"/>
+        <path d="M0,80 C40,70 80,40 120,50 C160,60 200,90 240,85 C280,80 320,30 360,40 C400,50 440,70 480,60 L500,55" fill="none" stroke="#14b8a6" strokeWidth="2.5" strokeLinecap="round"/>
+        {[0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480].map((x, i) => (
+          <line key={i} x1={x} y1="0" x2={x} y2="120" stroke="#e5e7eb" strokeWidth="0.5" opacity="0.5"/>
+        ))}
+      </svg>
+      <div className="flex justify-between mt-1 text-[10px] text-gray-400">
+        <span>01</span><span>05</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30</span>
+      </div>
+    </div>
   );
 }
 
@@ -161,15 +187,13 @@ export default function DashboardPage() {
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  // Prevent flash while checking onboarding state
   if (!isLoaded || (user && !user.unsafeMetadata?.onboarded)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: "#060818" }}>
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: "#e8f5f0" }}>
         <div className="relative mb-6">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-indigo-500/40">S</div>
-          <div className="absolute -inset-2 rounded-2xl border border-indigo-500/30 animate-ping opacity-30" />
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-teal-500/30">S</div>
         </div>
-        <p className="text-slate-500 text-sm animate-pulse tracking-wide">Loading workspace...</p>
+        <p className="text-teal-700 text-sm animate-pulse tracking-wide">Loading workspace...</p>
       </div>
     );
   }
@@ -192,7 +216,6 @@ export default function DashboardPage() {
         formData.append("referenceBook", data.referenceBook);
       }
 
-      // Use Next.js proxy (/api/...) so auth cookies & CORS are handled correctly
       const response = await fetch(`/api/syllabus/upload`, {
         method: "POST",
         body: formData,
@@ -205,17 +228,15 @@ export default function DashboardPage() {
         const sid = responseData.syllabus._id;
         setSyllabusId(sid);
 
-        // Build topic graph — use proxy, pass real userId
         try {
           const graphResponse = await fetch(`/api/graph/from-syllabus/${sid}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId: user?.id }),
           });
-          if (graphResponse.ok) console.log("✅ Topic graph generated for", sid);
-          else console.warn("⚠️ Topic graph generation failed (will retry on plan page)");
+          if (graphResponse.ok) console.log("Topic graph generated for", sid);
         } catch (graphErr) {
-          console.warn("⚠️ Topic graph network error:", graphErr);
+          console.warn("Topic graph network error:", graphErr);
         }
 
         router.push(`/dashboard/plan?syllabusId=${sid}`);
@@ -229,106 +250,230 @@ export default function DashboardPage() {
     }
   };
 
-
   const renderContent = () => {
     switch (activeTab) {
       case "home":
         return (
-          <div className="space-y-8">
-            {/* Personal greeting */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <h1 className="text-3xl sm:text-4xl font-bold text-slate-50">
-                {greeting},{" "}
-                <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-emerald-400 bg-clip-text text-transparent animate-gradient">
-                  {displayName}
-                </span>{" "}
-                👋
-              </h1>
-              <p className="mt-2 text-slate-400 text-sm">
-                {grade ? `${grade} student · ` : ""}Here&apos;s your study overview for today.
-              </p>
-            </motion.div>
+          <div className="space-y-6">
+            {/* Header Row */}
+            <div className="flex items-start justify-between">
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+                <h1 className="text-2xl font-bold text-gray-800">
+                  {greeting}, <span className="text-teal-600">{displayName}</span>
+                </h1>
+                <p className="text-sm text-gray-400 mt-1">
+                  {new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
+                </p>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center text-sm font-bold text-white overflow-hidden">
+                  {user?.imageUrl
+                    ? <img src={user.imageUrl} alt={displayName} className="h-10 w-10 rounded-full object-cover" />
+                    : displayName.charAt(0)}
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-700">{displayName}</p>
+                  <p className="text-[10px] text-gray-400">Student</p>
+                </div>
+              </motion.div>
+            </div>
 
-            {/* Stat cards */}
+            {/* Stat Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {STAT_CARDS.map((s, i) => {
-                let val = "0";
-                switch (s.key) {
-                  case "streak": val = String(streakDays); break;
-                  case "readiness": val = String(readinessPct); break;
-                  case "studied": val = String(studiedToday); break;
-                  case "topics": val = `${topicsDone} / ${totalTopics}`; break;
-                }
-                return <StatCard key={s.label} s={{ ...s, value: val }} i={i} />;
-              })}
-            </div>
-
-            {/* Due for review banner */}
-            <ReviewBanner reviewsDueToday={reviewsDueToday} userId={user?.id} />
-
-            {/* Quick Actions */}
-            <div>
-              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {[
-                  { icon: "📤", label: "Upload Syllabus",     desc: "Analyze your syllabus with AI",       tab: "upload" as Tab,    gradient: "from-indigo-500/15 to-violet-500/10  border-indigo-500/25" },
-                  { icon: "⏱️", label: "Start Focus Session",  desc: "Begin a Pomodoro work block",         tab: "focus" as Tab,     gradient: "from-emerald-500/15 to-teal-500/10    border-emerald-500/25" },
-                  { icon: "📊", label: "View Analytics",      desc: "See your study performance",          tab: "analytics" as Tab, gradient: "from-sky-500/15 to-blue-500/10          border-sky-500/25" },
-                  { icon: "🗺️", label: "Learning Map",        desc: "Explore topic dependencies",         tab: "graph" as Tab,     gradient: "from-violet-500/15 to-fuchsia-500/10  border-violet-500/25" },
-                  { icon: "🧠", label: "Cognitive Analysis",  desc: "Check your mental load",              tab: "cognitive" as Tab, gradient: "from-amber-500/15 to-orange-500/10     border-amber-500/25" },
-                  { icon: "📅", label: "Study Schedule",      desc: "Your day-by-day plan",                tab: "schedule" as Tab,  gradient: "from-rose-500/15 to-pink-500/10          border-rose-500/25" },
-                  { icon: "🎤", label: "Voice Log",           desc: "Log session with voice",              tab: "voice" as Tab,     gradient: "from-purple-500/15 to-indigo-500/10   border-purple-500/25" },
-                  { icon: "🧠", label: "AI Strategy",         desc: "Generate study plan",                tab: "strategy" as Tab,  gradient: "from-cyan-500/15 to-teal-500/10       border-cyan-500/25" },
-                ].map((item, i) => (
-                  <motion.button
-                    key={item.label}
-                    initial={{ opacity: 0, y: 20 }}
+              {[
+                { icon: "📅", value: "03/05", label: "Total classes", color: "bg-amber-50" },
+                { icon: "👥", value: "03/05", label: "Total students", color: "bg-teal-50" },
+                { icon: "👥", value: "03/05", label: "Total students", color: "bg-teal-50" },
+                { icon: "👥", value: "03/05", label: "Total students", color: "bg-orange-50" },
+              ].map((card, i) => (
+                <ClickSpark key={i} sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + i * 0.06, duration: 0.4 }}
-                    whileHover={{ y: -4, scale: 1.02 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setActiveTab(item.tab)}
-                    className="text-left rounded-2xl p-5 glass-shine"
-                    style={{
-                      background: `linear-gradient(135deg, ${item.gradient.split(' ')[0].replace('from-','').includes('/') ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.10)'} 0%, rgba(255,255,255,0.025) 100%)`,
-                      backdropFilter: "blur(24px)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)",
-                      transition: "all 0.2s ease",
-                    }}
+                    transition={{ delay: i * 0.08, duration: 0.4 }}
+                    whileHover={{ y: -3, scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="stat-card"
                   >
-                    <span className="text-2xl">{item.icon}</span>
-                    <p className="mt-3 text-sm font-bold text-slate-100">{item.label}</p>
-                    <p className="mt-1 text-xs text-slate-500 leading-relaxed">{item.desc}</p>
-                  </motion.button>
-                ))}
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-xl ${card.color} flex items-center justify-center text-lg`}>
+                        {card.icon}
+                      </div>
+                      <div>
+                        <p className="text-xl font-bold text-gray-800">{card.value}</p>
+                        <p className="text-xs text-gray-400">{card.label}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                </ClickSpark>
+              ))}
+            </div>
+
+            {/* Main Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Left Column - Students Performance */}
+              <div className="lg:col-span-1">
+                <ClickSpark sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.4 }}
+                    className="dashboard-card p-5 h-full"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="section-title">Students performance</h3>
+                      <div className="flex gap-2 text-[10px]">
+                        <span className="text-gray-400 cursor-pointer hover:text-teal-500">Details</span>
+                        <span className="text-gray-400 cursor-pointer hover:text-teal-500">In progress</span>
+                        <span className="text-gray-400 cursor-pointer hover:text-teal-500">Average</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {STUDENTS.map((s, i) => (
+                        <motion.div
+                          key={s.name}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.3 + i * 0.08 }}
+                          className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center text-xs font-bold text-white">
+                            {s.name.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 truncate">{s.name}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold" style={{ color: s.score >= 80 ? "#14b8a6" : s.score >= 60 ? "#f59e0b" : "#ef4444" }}>
+                              {s.score}%
+                            </p>
+                          </div>
+                          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <motion.div
+                              className="h-full rounded-full"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${s.score}%` }}
+                              transition={{ delay: 0.5 + i * 0.1, duration: 0.8 }}
+                              style={{ background: s.score >= 80 ? "#14b8a6" : s.score >= 60 ? "#f59e0b" : "#ef4444" }}
+                            />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+                </ClickSpark>
+              </div>
+
+              {/* Center Column - Attendance Chart */}
+              <div className="lg:col-span-2">
+                <ClickSpark sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.4 }}
+                    className="h-full"
+                  >
+                    <AttendanceChart />
+                  </motion.div>
+                </ClickSpark>
               </div>
             </div>
 
-            {/* AI Coach Card */}
-            <GlassCard glow className="p-6">
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-lg shadow-lg shadow-indigo-500/20">
-                  🤖
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">AI Daily Coach</p>
-                  <p className="text-sm text-slate-200 leading-relaxed">
-                    {displayName}, you have{" "}
-                    <span className="text-indigo-300 font-semibold">{reviewsDueToday} topics due for spaced repetition</span>{" "}
-                    today. Your focus score has improved by{" "}
-                    <span className="text-emerald-300 font-semibold">18%</span> this week — great momentum! 🎉
-                  </p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    💡 Tip: Your best focus window is 9 AM – 11 AM based on your session history.
-                  </p>
-                </div>
+            {/* Right Sidebar Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Teaching Lessons */}
+              <div className="lg:col-span-1">
+                <ClickSpark sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4, duration: 0.4 }}
+                    className="dashboard-card p-5 h-full"
+                  >
+                    <h3 className="section-title mb-4">Teaching lessons</h3>
+                    <div className="space-y-3">
+                      {LESSONS.map((l, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.5 + i * 0.08 }}
+                          className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center text-base">
+                            {l.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700">{l.title}</p>
+                            <p className="text-[10px] text-gray-400">{l.time}</p>
+                          </div>
+                          <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded-md">{l.subject}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+                </ClickSpark>
               </div>
-            </GlassCard>
+
+              {/* Right Column - Calendar + Events + Notes */}
+              <div className="lg:col-span-2 space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  {/* Calendar */}
+                  <ClickSpark sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>
+                      <MiniCalendar />
+                    </motion.div>
+                  </ClickSpark>
+
+                  {/* Upcoming Events */}
+                  <ClickSpark sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                    <motion.div
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5, duration: 0.4 }}
+                      className="dashboard-card p-5"
+                    >
+                      <h3 className="section-title mb-4">Upcoming Event</h3>
+                      <div className="space-y-3">
+                        {EVENTS.map((e, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.55 + i * 0.08 }}
+                            className="flex items-center gap-3"
+                          >
+                            <div className="text-[10px] text-gray-400 w-12 shrink-0">{e.time}</div>
+                            <div className="h-2 w-2 rounded-full shrink-0" style={{ background: e.color }} />
+                            <span className="text-sm text-gray-600">{e.label}</span>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </ClickSpark>
+                </div>
+
+                {/* My Notes */}
+                <ClickSpark sparkColor="#14b8a6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.55, duration: 0.4 }}
+                    className="dashboard-card p-5"
+                  >
+                    <h3 className="section-title mb-3">My Notes</h3>
+                    <div className="space-y-2">
+                      {NOTES.map((n, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm text-gray-500">
+                          <div className="h-1.5 w-1.5 rounded-full bg-teal-400 shrink-0" />
+                          <span>{n}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                </ClickSpark>
+              </div>
+            </div>
           </div>
         );
 
@@ -336,8 +481,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">Upload Your Syllabus</h1>
-              <p className="mt-1 text-slate-400 text-sm">AI will analyze it and create your personalized study plan</p>
+              <h1 className="text-3xl font-bold text-gray-800">Upload Your Syllabus</h1>
+              <p className="mt-1 text-gray-500 text-sm">AI will analyze it and create your personalized study plan</p>
             </div>
             <SyllabusUploader onSyllabusSubmit={handleSyllabusSubmit} />
           </div>
@@ -347,8 +492,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">Learning Path Map</h1>
-              <p className="mt-1 text-slate-400 text-sm">Visualize topic dependencies and optimal learning order</p>
+              <h1 className="text-3xl font-bold text-gray-800">Learning Path Map</h1>
+              <p className="mt-1 text-gray-500 text-sm">Visualize topic dependencies and optimal learning order</p>
             </div>
             <KnowledgeGraph syllabusId={syllabusId || undefined} userId={user?.id} />
           </div>
@@ -358,8 +503,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">Your Study Schedule</h1>
-              <p className="mt-1 text-slate-400 text-sm">Track your day-by-day study plan and progress</p>
+              <h1 className="text-3xl font-bold text-gray-800">Your Study Schedule</h1>
+              <p className="mt-1 text-gray-500 text-sm">Track your day-by-day study plan and progress</p>
             </div>
             <CalendarTimeline planId={planId || undefined} userId={user?.id} />
           </div>
@@ -369,8 +514,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">Focus Timer</h1>
-              <p className="mt-1 text-slate-400 text-sm">Pomodoro technique with distraction tracking</p>
+              <h1 className="text-3xl font-bold text-gray-800">Focus Timer</h1>
+              <p className="mt-1 text-gray-500 text-sm">Pomodoro technique with distraction tracking</p>
             </div>
             <FocusTimer userId={user?.id} planId={planId || undefined} />
           </div>
@@ -380,8 +525,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">Session Analytics</h1>
-              <p className="mt-1 text-slate-400 text-sm">Insights into your study habits and performance</p>
+              <h1 className="text-3xl font-bold text-gray-800">Session Analytics</h1>
+              <p className="mt-1 text-gray-500 text-sm">Insights into your study habits and performance</p>
             </div>
             <div className="grid lg:grid-cols-2 gap-6">
               <ReadinessChart userId={user?.id} syllabusId={syllabusId || undefined} />
@@ -395,8 +540,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">🧠 Cognitive Load Analyzer</h1>
-              <p className="mt-1 text-slate-400 text-sm">AI analyzes topic difficulty and recommends optimizations</p>
+              <h1 className="text-3xl font-bold text-gray-800">Cognitive Load Analyzer</h1>
+              <p className="mt-1 text-gray-500 text-sm">AI analyzes topic difficulty and recommends optimizations</p>
             </div>
             <CognitiveLoadTracker userId={user?.id} syllabusId={syllabusId || undefined} />
           </div>
@@ -406,8 +551,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">👤 My Learning Profile</h1>
-              <p className="mt-1 text-slate-400 text-sm">AI Digital Twin analyzing your unique learning patterns</p>
+              <h1 className="text-3xl font-bold text-gray-800">My Learning Profile</h1>
+              <p className="mt-1 text-gray-500 text-sm">AI Digital Twin analyzing your unique learning patterns</p>
             </div>
             <DigitalTwinProfile userId={user?.id} syllabusId={syllabusId || undefined} />
           </div>
@@ -417,24 +562,23 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">🎤 Voice Session Logger</h1>
-              <p className="mt-1 text-slate-400 text-sm">Speak to log your study sessions automatically</p>
+              <h1 className="text-3xl font-bold text-gray-800">Voice Session Logger</h1>
+              <p className="mt-1 text-gray-500 text-sm">Speak to log your study sessions automatically</p>
             </div>
             {syllabusId ? (
-              <GlassCard className="p-6 max-w-md mx-auto">
+              <div className="dashboard-card p-6 max-w-md mx-auto">
                 <VoiceInput 
                   userId={user?.id || ''} 
                   syllabusId={syllabusId}
                   onSessionLogged={() => {
-                    // Refresh plan data if needed
                     console.log('Session logged via voice');
                   }}
                 />
-              </GlassCard>
+              </div>
             ) : (
-              <GlassCard className="p-6">
-                <p className="text-slate-400 text-center">Please upload a syllabus first to use voice logging.</p>
-              </GlassCard>
+              <div className="dashboard-card p-6">
+                <p className="text-gray-500 text-center">Please upload a syllabus first to use voice logging.</p>
+              </div>
             )}
           </div>
         );
@@ -443,8 +587,8 @@ export default function DashboardPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-50">🧠 AI Strategy Generator</h1>
-              <p className="mt-1 text-slate-400 text-sm">Get personalized study strategies from AI</p>
+              <h1 className="text-3xl font-bold text-gray-800">AI Strategy Generator</h1>
+              <p className="mt-1 text-gray-500 text-sm">Get personalized study strategies from AI</p>
             </div>
             {syllabusId ? (
               <StrategyChat 
@@ -455,9 +599,9 @@ export default function DashboardPage() {
                 }}
               />
             ) : (
-              <GlassCard className="p-6">
-                <p className="text-slate-400 text-center">Please upload a syllabus first to generate strategies.</p>
-              </GlassCard>
+              <div className="dashboard-card p-6">
+                <p className="text-gray-500 text-center">Please upload a syllabus first to generate strategies.</p>
+              </div>
             )}
           </div>
         );
@@ -469,45 +613,20 @@ export default function DashboardPage() {
 
   return (
     <SidebarLayout>
-      {/* Tab Bar */}
-      <div className="mb-6 relative flex items-center gap-1 overflow-x-auto pb-1 scrollbar-thin">
-        {TABS.map((tab) => (
-          <motion.button
-            key={tab.id}
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setActiveTab(tab.id as Tab)}
-            className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-              activeTab === tab.id
-                ? "bg-indigo-500/20 text-indigo-200 shadow-md shadow-indigo-500/10"
-                : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
-            }`}
+      <ClickSpark sparkColor="#14b8a6" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+        {/* Content with page transition */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
           >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-            {activeTab === tab.id && (
-              <motion.div
-                layoutId="tab-indicator"
-                className="absolute inset-0 rounded-xl bg-indigo-500/10 border border-indigo-500/20"
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              />
-            )}
-          </motion.button>
-        ))}
-      </div>
-
-      {/* Content with page transition */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.25, ease: "easeOut" }}
-        >
-          {renderContent()}
-        </motion.div>
-      </AnimatePresence>
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
+      </ClickSpark>
     </SidebarLayout>
   );
 }
